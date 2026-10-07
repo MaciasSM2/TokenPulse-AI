@@ -1,0 +1,84 @@
+{
+  "models": {
+    "gemini-2.5-pro": {
+      "name": "Gemini 2.5 Pro",
+      "input_per_million": 1.25,
+      "output_per_million": 5.00
+    },
+    "gemini-3.8-flash": {
+      "name": "Gemini 3.8 Flash",
+      "input_per_million": 0.15,
+      "output_per_million": 0.60
+    },
+    "gemini-2.0-flash": {
+      "name": "Gemini 2.0 Flash",
+      "input_per_million": 0.10,
+      "output_per_million": 0.40
+    },
+    "gemini-flash": {
+      "name": "Gemini Flash (Default)",
+      "input_per_million": 0.15,
+      "output_per_million": 0.60
+    },
+    "claude-3-5-sonnet": {
+      "name": "Claude 3.5 Sonnet",
+      "input_per_million": 3.00,
+      "output_per_million": 15.00
+    },
+    "claude-3-7-sonnet": {
+      "name": "Claude 3.7 Sonnet",
+      "input_per_million": 3.00,
+      "output_per_million": 15.00
+    },
+    "claude-3-5-haiku": {
+      "name": "Claude 3.5 Haiku",
+      "input_per_million": 0.80,
+      "output_per_million": 4.00
+    },
+    "gpt-4o": {
+      "name": "GPT-4o",
+      "input_per_million": 2.50,
+      "output_per_million": 10.00
+    },
+    "gpt-4o-mini": {
+      "name": "GPT-4o Mini",
+      "input_per_million": 0.15,
+      "output_per_million": 0.60
+    },
+    "deepseek-chat": {
+      "name": "DeepSeek V3",
+      "input_per_million": 0.14,
+      "output_per_million": 0.28
+    },
+    "deepseek-reasoner": {
+      "name": "DeepSeek R1",
+      "input_per_million": 0.55,
+      "output_per_million": 2.19
+    },
+    "deepseek-v4-flash-free": {
+      "name": "DeepSeek V4 Flash (Free)",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "big-pickle": {
+      "name": "Big Pickle",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "nemotron-3-ultra-free": {
+      "name": "Nemotron 3 Ultra (Free)",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "mimo-v2.5-free": {
+      "name": "Mimo V2.5 (Free)",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "default": {
+      "name": "Modelo Estándar / Fallback",
+      "input_per_million": 0.50,
+      "output_per_million": 2.00
+    }
+  }
+}

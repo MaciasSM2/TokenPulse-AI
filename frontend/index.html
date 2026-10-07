@@ -1,0 +1,511 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>TokenPulse AI | Contador de Tokens y Costes por Proyecto</title>
+  <meta name="description" content="Dashboard en tiempo real para auditoría de tokens y costes de Inteligencia Artificial desglosado por proyectos y por cada modelo de IA.">
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Plus+Jakarta+Sans:wght@300;400;500;600;700;800&family=JetBrains+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="/static/app.css">
+</head>
+<body>
+  <div class="app-container">
+    <!-- Top Navigation -->
+    <header class="app-header">
+      <div class="header-left">
+        <div class="brand-logo">
+          <div class="brand-icon">
+            <svg width="24" height="24" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M12 2v20M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+            </svg>
+          </div>
+          <div>
+            <h1 class="brand-title">TokenPulse <span class="gradient-text">AI</span></h1>
+            <p class="brand-subtitle">Auditor de Tokens & Gasto por Proyecto y Modelo</p>
+          </div>
+        </div>
+
+        <!-- Mode Switcher -->
+        <div class="view-mode-tabs">
+          <button class="mode-tab active" id="tabGlobalView">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="10"/><path d="M2 12h20M12 2a15.3 15.3 0 0 1 4 10 15.3 15.3 0 0 1-4 10 15.3 15.3 0 0 1-4-10 15.3 15.3 0 0 1 4-10z"/></svg>
+            Vista Global
+          </button>
+          <button class="mode-tab" id="tabProjectView">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+            Vista por Proyecto
+          </button>
+        </div>
+      </div>
+
+      <div class="header-right">
+        <!-- Project Selector Dropdown -->
+        <div class="project-selector-wrapper">
+          <label for="projectSelect" class="sr-only">Seleccionar Proyecto</label>
+          <select id="projectSelect" class="project-select">
+            <option value="">📁 Seleccionar Proyecto...</option>
+            <!-- Populated dynamically -->
+          </select>
+        </div>
+
+        <button id="btnLinkProject" class="btn btn-secondary btn-sm" title="Vincular nueva carpeta de proyecto">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 5v14M5 12h14"/></svg>
+          <span>Vincular Proyecto</span>
+        </button>
+
+        <div class="sync-status-badge" id="syncStatus">
+          <span class="status-dot"></span>
+          <span id="syncStatusText">Sincronizado</span>
+          <span class="last-sync-time" id="lastSyncTime">--:--</span>
+        </div>
+
+        <button id="btnSync" class="btn btn-primary" title="Sincronizar datos ahora">
+          <svg class="spin-icon" width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <path d="M21.5 2v6h-6M21.34 15.57a10 10 0 1 1-.57-8.38l5.67-5.67"/>
+          </svg>
+          <span>Sincronizar</span>
+        </button>
+
+        <button id="btnPricingModal" class="btn btn-secondary" title="Configurar tarifas de modelos">
+          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+            <circle cx="12" cy="12" r="3"/>
+            <path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/>
+          </svg>
+          <span>Tarifas</span>
+        </button>
+      </div>
+    </header>
+
+    <!-- VIEW 1: GLOBAL OVERVIEW -->
+    <main class="dashboard-grid" id="globalViewContainer">
+      <!-- KPI Cards -->
+      <section class="kpi-container">
+        <!-- Card 1: Total Cost -->
+        <div class="kpi-card cost-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Gasto Total Acumulado</span>
+            <div class="kpi-icon-pill glow-green">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <line x1="12" y1="1" x2="12" y2="23"/>
+                <path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpiTotalCost">$0.00</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">Antigravity: <strong id="kpiCostAntigravity">$0.00</strong></span>
+            <span class="stat-divider">•</span>
+            <span class="sub-stat">OpenCode: <strong id="kpiCostOpenCode">$0.00</strong></span>
+          </div>
+        </div>
+
+        <!-- Card 2: Total Tokens -->
+        <div class="kpi-card tokens-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Tokens Totales Consumidos</span>
+            <div class="kpi-icon-pill glow-purple">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpiTotalTokens">0</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">In: <strong id="kpiInTokens">0</strong></span>
+            <span class="stat-divider">•</span>
+            <span class="sub-stat">Out: <strong id="kpiOutTokens">0</strong></span>
+            <span class="stat-divider">•</span>
+            <span class="sub-stat">Think: <strong id="kpiReasonTokens">0</strong></span>
+          </div>
+        </div>
+
+        <!-- Card 3: Total Sessions -->
+        <div class="kpi-card sessions-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Sesiones de Desarrollo</span>
+            <div class="kpi-icon-pill glow-blue">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <rect x="2" y="3" width="20" height="14" rx="2" ry="2"/>
+                <line x1="8" y1="21" x2="16" y2="21"/>
+                <line x1="12" y1="17" x2="12" y2="21"/>
+              </svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="kpiTotalSessions">0</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">Antigravity: <strong id="kpiSessionsAntigravity">0</strong></span>
+            <span class="stat-divider">•</span>
+            <span class="sub-stat">OpenCode: <strong id="kpiSessionsOpenCode">0</strong></span>
+          </div>
+        </div>
+
+        <!-- Card 4: Optimizations Active -->
+        <div class="kpi-card optim-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Optimizadores Activos</span>
+            <div class="kpi-icon-pill glow-amber">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/>
+              </svg>
+            </div>
+          </div>
+          <div class="optim-badges-row">
+            <div class="optim-tag active" title="AST Knowledge Graph habilitado">
+              <span class="dot-green"></span> Graphify
+            </div>
+            <div class="optim-tag active" title="Concise STE Prompting habilitado">
+              <span class="dot-green"></span> Caveman
+            </div>
+          </div>
+          <div class="kpi-footer">
+            <span class="sub-stat">Ahorro Estimado: <strong class="text-success">~65% tokens</strong></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Middle Grid: Analytics & Charts -->
+      <section class="charts-row">
+        <!-- Chart 1: IDE Distribution -->
+        <div class="glass-panel chart-panel">
+          <div class="panel-header">
+            <h3>Distribución por IDE</h3>
+            <span class="panel-hint">Comparativa de volumen y coste</span>
+          </div>
+          <div class="ide-compare-bars" id="ideCompareContainer"></div>
+        </div>
+
+        <!-- Chart 2: Top Models -->
+        <div class="glass-panel chart-panel">
+          <div class="panel-header">
+            <h3>Modelos Más Utilizados</h3>
+            <span class="panel-hint">Por tokens consumidos</span>
+          </div>
+          <div class="model-distribution-list" id="modelsContainer"></div>
+        </div>
+
+        <!-- Chart 3: Top Projects -->
+        <div class="glass-panel chart-panel">
+          <div class="panel-header">
+            <h3>Proyectos Registrados</h3>
+            <span class="panel-hint">Haz clic en cualquiera para auditarlo</span>
+          </div>
+          <div class="projects-list" id="projectsContainer"></div>
+        </div>
+      </section>
+
+      <!-- Timeline Chart Panel -->
+      <section class="glass-panel timeline-panel">
+        <div class="panel-header">
+          <div>
+            <h3>Evolución Temporal de Consumo</h3>
+            <span class="panel-hint">Actividad diaria en los últimos 30 días</span>
+          </div>
+        </div>
+        <div class="timeline-chart-wrapper" id="timelineChartWrapper"></div>
+      </section>
+
+      <!-- Sessions Explorer Table -->
+      <section class="glass-panel table-panel">
+        <div class="table-header-toolbar">
+          <div class="toolbar-left">
+            <h3>Explorador Global de Sesiones</h3>
+            <div class="ide-filter-tabs">
+              <button class="filter-tab active" data-ide="all">Todos</button>
+              <button class="filter-tab" data-ide="antigravity">Antigravity</button>
+              <button class="filter-tab" data-ide="opencode">OpenCode</button>
+            </div>
+          </div>
+          <div class="toolbar-right">
+            <div class="search-input-wrapper">
+              <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <circle cx="11" cy="11" r="8"/>
+                <line x1="21" y1="21" x2="16.65" y2="16.65"/>
+              </svg>
+              <input type="text" id="sessionSearch" placeholder="Buscar por proyecto, modelo o título...">
+            </div>
+          </div>
+        </div>
+
+        <div class="table-responsive">
+          <table class="sessions-table">
+            <thead>
+              <tr>
+                <th>IDE</th>
+                <th>Proyecto / Tarea</th>
+                <th>Modelo</th>
+                <th>Tokens Entrada</th>
+                <th>Tokens Salida</th>
+                <th>Total Tokens</th>
+                <th>Coste Estimado</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody id="sessionsTableBody">
+              <tr>
+                <td colspan="8" class="loading-cell">Cargando registros...</td>
+              </tr>
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+
+    <!-- VIEW 2: DEDICATED PROJECT AUDIT VIEW -->
+    <main class="project-view-container" id="projectViewContainer" style="display: none;">
+      <!-- Project Header Card -->
+      <section class="glass-panel project-hero-card">
+        <div class="project-hero-main">
+          <div class="project-icon-badge">
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
+            </svg>
+          </div>
+          <div>
+            <div class="project-meta-pill">
+              <span class="status-dot"></span> Proyecto Vinculado
+            </div>
+            <h2 class="project-hero-title" id="projHeroName">Nombre del Proyecto</h2>
+            <p class="project-hero-path" id="projHeroPath">C:\ruta\al\proyecto</p>
+          </div>
+        </div>
+
+        <div class="project-hero-actions">
+          <button class="btn btn-primary" id="btnLogCommandModal">
+            <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+              <polygon points="5 3 19 12 5 21 5 3"/>
+            </svg>
+            <span>Registrar Proceso / Comando</span>
+          </button>
+          <button class="btn btn-secondary" id="btnBackToGlobal">
+            <span>← Vista Global</span>
+          </button>
+        </div>
+      </section>
+
+      <!-- Project KPIs Row -->
+      <section class="kpi-container">
+        <div class="kpi-card cost-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Gasto en este Proyecto</span>
+            <div class="kpi-icon-pill glow-green">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="1" x2="12" y2="23"/><path d="M17 5H9.5a3.5 3.5 0 0 0 0 7h5a3.5 3.5 0 0 1 0 7H6"/></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="projKpiCost">$0.00</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">Desde el inicio del proyecto hasta hoy</span>
+          </div>
+        </div>
+
+        <div class="kpi-card tokens-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Tokens Totales del Proyecto</span>
+            <div class="kpi-icon-pill glow-purple">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><polygon points="13 2 3 14 12 14 11 22 21 10 12 10 13 2"/></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="projKpiTokens">0</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">In: <strong id="projKpiIn">0</strong></span>
+            <span class="stat-divider">•</span>
+            <span class="sub-stat">Out: <strong id="projKpiOut">0</strong></span>
+            <span class="stat-divider">•</span>
+            <span class="sub-stat">Think: <strong id="projKpiReason">0</strong></span>
+          </div>
+        </div>
+
+        <div class="kpi-card sessions-card">
+          <div class="kpi-header">
+            <span class="kpi-label">Sesiones y Procesos</span>
+            <div class="kpi-icon-pill glow-blue">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><rect x="2" y="3" width="20" height="14" rx="2" ry="2"/></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="projKpiSessions">0</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">Inicio: <strong id="projFirstDate">--</strong></span>
+          </div>
+        </div>
+
+        <div class="kpi-card optim-card">
+          <div class="kpi-header">
+            <span class="kpi-label">IAs Utilizadas</span>
+            <div class="kpi-icon-pill glow-amber">
+              <svg width="18" height="18" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M12 22s8-4 8-10V5l-8-3-8 3v7c0 6 8 10 8 10z"/></svg>
+            </div>
+          </div>
+          <div class="kpi-value" id="projKpiModelCount" style="color: var(--accent-amber);">0</div>
+          <div class="kpi-footer">
+            <span class="sub-stat">Último uso: <strong id="projLastDate">--</strong></span>
+          </div>
+        </div>
+      </section>
+
+      <!-- Crucial Section: AI Models Breakdown in this Project -->
+      <section class="glass-panel" style="margin-bottom: 28px;">
+        <div class="panel-header">
+          <h3>Inteligencias Artificiales en este Proyecto</h3>
+          <p class="panel-hint">Contabilidad desglosada por cada modelo de IA: tokens utilizados y gasto monetario específico</p>
+        </div>
+        <div class="table-responsive">
+          <table class="sessions-table">
+            <thead>
+              <tr>
+                <th>Inteligencia Artificial</th>
+                <th>Sesiones</th>
+                <th>Tokens Entrada</th>
+                <th>Tokens Salida</th>
+                <th>Tokens Razonamiento</th>
+                <th>Total Tokens</th>
+                <th>% Consumo</th>
+                <th>Gasto en este Proyecto</th>
+              </tr>
+            </thead>
+            <tbody id="projModelsTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+
+      <!-- Historical Project Timeline -->
+      <section class="glass-panel timeline-panel">
+        <div class="panel-header">
+          <div>
+            <h3>Historial Cronológico del Proyecto (Desde su inicio hasta hoy)</h3>
+            <span class="panel-hint">Evolución de tokens y gasto día por día en este proyecto</span>
+          </div>
+        </div>
+        <div class="timeline-chart-wrapper" id="projTimelineWrapper"></div>
+      </section>
+
+      <!-- Project Sessions & Process Events -->
+      <section class="glass-panel table-panel">
+        <div class="panel-header">
+          <h3>Historial de Procesos, Comandos y Sesiones</h3>
+          <span class="panel-hint">Registro cronológico de actividades y ejecuciones en este proyecto</span>
+        </div>
+        <div class="table-responsive">
+          <table class="sessions-table">
+            <thead>
+              <tr>
+                <th>Entorno</th>
+                <th>Título / Proceso</th>
+                <th>Modelo</th>
+                <th>Tokens Entrada</th>
+                <th>Tokens Salida</th>
+                <th>Total Tokens</th>
+                <th>Coste USD</th>
+                <th>Fecha</th>
+              </tr>
+            </thead>
+            <tbody id="projSessionsTableBody">
+              <!-- Populated dynamically -->
+            </tbody>
+          </table>
+        </div>
+      </section>
+    </main>
+  </div>
+
+  <!-- Modal: Link / Init Project -->
+  <div class="modal-overlay" id="linkProjectModal">
+    <div class="modal-content glass-panel">
+      <div class="modal-header">
+        <h3>Vincular Carpeta de Proyecto</h3>
+        <button class="btn-close" id="btnCloseLinkModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Ingresa la ruta de la carpeta del proyecto para vincularlo con el paquete TokenPulse y auditar su consumo:</p>
+        <div class="form-group">
+          <label for="linkPath">Ruta de la Carpeta del Proyecto:</label>
+          <input type="text" id="linkPath" class="form-input" placeholder="C:\Users\...\Documents\0. Programacion\MiProyecto">
+        </div>
+        <div class="form-group">
+          <label for="linkName">Nombre del Proyecto (Opcional):</label>
+          <input type="text" id="linkName" class="form-input" placeholder="Nombre identificador">
+        </div>
+        <div class="form-group">
+          <label for="linkBudget">Presupuesto Límite en USD (Opcional):</label>
+          <input type="number" id="linkBudget" class="form-input" placeholder="10.00" step="0.5">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelLink">Cancelar</button>
+        <button class="btn btn-primary" id="btnSubmitLink">Vincular Proyecto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Log Process / Command -->
+  <div class="modal-overlay" id="logEventModal">
+    <div class="modal-content glass-panel">
+      <div class="modal-header">
+        <h3>Registrar Proceso o Comando</h3>
+        <button class="btn-close" id="btnCloseLogModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Registra una actualización, comando o situación realizada en este proyecto:</p>
+        <div class="form-group">
+          <label for="eventDesc">Descripción del Proceso / Actualización:</label>
+          <input type="text" id="eventDesc" class="form-input" placeholder="Ej: Refactorización de componentes de autenticación">
+        </div>
+        <div class="form-group">
+          <label for="eventCmd">Comando Ejecutado (Opcional):</label>
+          <input type="text" id="eventCmd" class="form-input" placeholder="Ej: npm run build o python main.py">
+        </div>
+        <div class="form-group">
+          <label for="eventModel">Modelo de Inteligencia Artificial:</label>
+          <select id="eventModel" class="form-input">
+            <option value="gemini-3.8-flash">Gemini 3.8 Flash</option>
+            <option value="gemini-2.5-pro">Gemini 2.5 Pro</option>
+            <option value="deepseek-v4-flash-free">DeepSeek V4 Flash (Free)</option>
+            <option value="claude-3-5-sonnet">Claude 3.5 Sonnet</option>
+            <option value="gpt-4o">GPT-4o</option>
+          </select>
+        </div>
+        <div class="form-group">
+          <label for="eventTokens">Tokens Estimados Utilizados:</label>
+          <input type="number" id="eventTokens" class="form-input" placeholder="1500" value="1000">
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelLog">Cancelar</button>
+        <button class="btn btn-primary" id="btnSubmitLog">Guardar en Historial</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Pricing -->
+  <div class="modal-overlay" id="pricingModal">
+    <div class="modal-content glass-panel">
+      <div class="modal-header">
+        <h3>Tarifas de Modelos de IA</h3>
+        <button class="btn-close" id="btnClosePricingModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Tarifas utilizadas para calcular el costo por cada millón de tokens:</p>
+        <div class="pricing-table-wrapper">
+          <table class="pricing-table">
+            <thead>
+              <tr>
+                <th>Modelo</th>
+                <th>Entrada / 1M</th>
+                <th>Salida / 1M</th>
+              </tr>
+            </thead>
+            <tbody id="pricingTableBody"></tbody>
+          </table>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-primary" id="btnClosePricingDone">Cerrar</button>
+      </div>
+    </div>
+  </div>
+
+  <script src="/static/app.js"></script>
+</body>
+</html>
