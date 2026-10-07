@@ -251,3 +251,18 @@ Salida esperada: `5/5 verificaciones superadas con éxito`, reportando estado 10
 | **Todo el Histórico** | Desde `2026-05-16` hasta hoy | Panorama global completo y acumulado del desarrollador. | Ilimitado |
 | **Personalizado (Calendario)** | Rango libre `Desde` - `Hasta` | Auditoría forense de fechas o entregas específicas. | Ilimitado |
 
+---
+
+## 10. Publicación y Despliegue de Versión v1.3.0 en GitHub
+
+* **Versión Oficial del Sistema:** `v1.3.0`
+* **Archivos con Versión Sincronizada:**
+  * `tokenpulse/__init__.py`: `__version__ = "1.3.0"`
+  * `backend/app.py`: `version="1.3.0"`
+  * `frontend/index.html` y `frontend/app.css`: Badge visual interactivo `<span class="badge-version">v1.3.0</span>` en el encabezado.
+  * `README.md`: Documentación completa reescrita y actualizada con insignias, arquitectura multi-IDE, catálogo de 41+ modelos y manual de filtros temporales.
+  * `PLAN_CONTADOR_TOKENS.md`: Actualización de estado al 100% completado en todas las fases (Fases 1 a 7).
+* **Control de Versiones y Release Remoto:**
+  * Git Tag: `v1.3.0`
+  * GitHub Release: Creado y publicado con `gh release create v1.3.0` en el repositorio [MaciasSM2/TokenPulse-AI](https://github.com/MaciasSM2/TokenPulse-AI).
+

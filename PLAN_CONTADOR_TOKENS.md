@@ -90,25 +90,32 @@ graph TD
 
 ## 5. Fases de Implementación Sugeridas
 
-### Fase 1: Prototipo de Ingesta y Extracción (Backend Core)
-* Crear los módulos extractores para OpenCode y Antigravity.
-* Implementar cálculo de tokens y asociación de precios por modelo.
-* Probar la agregación con los datos históricos ya existentes en su máquina.
+### Fase 1: Prototipo de Ingesta y Extracción (Backend Core) — [COMPLETADO ✅]
+* Módulos extractores para OpenCode y Antigravity implementados.
+* Cálculo de tokens y asociación de precios por modelo activos.
+* Agregación histórica consolidada de 227 sesiones.
 
-### Fase 2: Almacenamiento Unificado y Sincronizador Automático
-* Diseñar la base de datos unificada local (`token_counter.db`).
-* Implementar sincronización periódica (detección de nuevas sesiones y actualización incremental en tiempo real).
+### Fase 2: Almacenamiento Unificado y Sincronizador Automático — [COMPLETADO ✅]
+* Base de datos unificada SQLite (`token_tracker.db`) en modo WAL.
+* Sincronizador periódico en segundo plano (`SyncManager`) cada 30 segundos.
 
-### Fase 3: API Local y Servidor de Métricas
-* Servicio local ligero con endpoints para estadísticas:
-  * `/api/summary` (totales acumulados, gasto de hoy, tokens totales).
-  * `/api/by-ide` (comparativa Antigravity vs OpenCode).
-  * `/api/by-project` (gasto por proyecto/repositorio).
-  * `/api/timeline` (evolución por días/horas).
+### Fase 3: API Local y Servidor de Métricas — [COMPLETADO ✅]
+* Servicio FastAPI ligero con endpoints `/api/stats`, `/api/projects`, `/api/sessions`, `/api/pricing`, `/api/ides/status`, `/api/export`.
 
-### Fase 4: Dashboard Interactivo y Panel de Control
-* Vista visual de alto impacto con KPIs:
-  * Gasto estimado en USD.
-  * Tokens de entrada, salida y razonamiento.
-  * Porcentaje de ahorro estimado por uso de Caveman y Graphify.
-  * Filtros por fecha y proyecto.
+### Fase 4: Dashboard Interactivo y Panel de Control — [COMPLETADO ✅]
+* Vista Global y Vista de Proyecto con KPIs en tiempo real, gráficas cronológicas y explorador de sesiones.
+
+### Fase 5: Portabilidad y Auto-Descubrimiento en Masa — [COMPLETADO ✅]
+* Paquete CLI `python -m tokenpulse scan` para auto-vincular proyectos masivamente.
+* Identificación portable mediante Git Remote URL (`remote.origin.url`).
+* Exportación de informes forenses en Markdown.
+
+### Fase 6: Expansión Multi-IDE y Multi-Modelo — [COMPLETADO ✅]
+* Detección y colectores para 9 IDEs (Antigravity, OpenCode, Claude Code, Cursor, Windsurf, VS Code, Continue, Aider, Ollama).
+* Catálogo de 41+ modelos de IA con filtros por proveedor y registro manual universal.
+
+### Fase 7: Filtro Temporal y Selector de Fechas (v1.3.0) — [COMPLETADO ✅]
+* Carga predeterminada en el día presente ("Hoy") para control de gasto en tiempo real.
+* Presets rápidos: 1 Día, 3 Días, 1 Semana, 1 Mes, Todo el Histórico.
+* Selector de calendario con retroactividad ilimitada hasta el inicio del registro histórico (`2026-05-16`).
+* Métricas KPI duales (período seleccionado vs histórico total acumulado).

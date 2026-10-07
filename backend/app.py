@@ -26,7 +26,7 @@ async def lifespan(app: FastAPI):
 app = FastAPI(
     title="TokenPulse AI | Contador de Tokens & Costes Multi-IDE",
     description="Monitor unificado de consumo y costes de tokens para múltiples IDEs (Antigravity, OpenCode, Claude Code, Cursor, Windsurf, VS Code, Ollama, Continue, Aider) y modelos de IA",
-    version="1.2.0",
+    version="1.3.0",
     lifespan=lifespan
 )
 
