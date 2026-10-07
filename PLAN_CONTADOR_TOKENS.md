@@ -119,3 +119,15 @@ graph TD
 * Presets rápidos: 1 Día, 3 Días, 1 Semana, 1 Mes, Todo el Histórico.
 * Selector de calendario con retroactividad ilimitada hasta el inicio del registro histórico (`2026-05-16`).
 * Métricas KPI duales (período seleccionado vs histórico total acumulado).
+
+### Fase 8: Explorador de Disco, Verificador Inteligente, Visibilidad y Adopción Externa (v1.3.5) — [COMPLETADO ✅]
+* **Explorador interactivo de carpetas:** Navegación en disco y selección de proyectos en tiempo real dentro del modal de vinculación.
+* **Verificador inteligente y anti-falsos positivos:** Resolución canónica (`resolve_canonical_project`) que escala hacia la raíz del repositorio, evitando que subcarpetas o archivos individuales se registren erróneamente como proyectos.
+* **Consolidación de base de datos:** Reclasificación de 17 sesiones dispersas en sus proyectos raíz canónicos.
+* **Favoritos (⭐) y Ocultar Carpetas (👁️):** Filtros rápidos (`📁 Todos`, `⭐ Favoritos`, `👁️ Ocultos`) con prioridad en el selector y listado.
+* **Modal de Ajustes de Visibilidad (`⚙️ Visibilidad`):** Interruptor maestro para ocultar los 7 IDEs inactivos/desconectados, checkboxes para los 9 IDEs y filtro de modelos no utilizados.
+* **Empaquetado Estándar (`pyproject.toml`):** Instalable globalmente mediante `pip install -e .`.
+* **SDK Python de Medición (`tokenpulse.tracker`):** Instrumentación en 2 líneas con `TokenTracker`, `track_usage` y decorador `@tracker.track()` tolerante a fallos para proyectos externos (FastAPI, bots, Ren'Py, etc.).
+* **Insignia Dinámica SVG (`/api/projects/{name}/badge.svg`):** Shield badge para incrustar en cualquier `README.md`.
+* **Guía de Integración:** Creada `GUIA_INTEGRACION_Y_ADOPCION.md`.
+

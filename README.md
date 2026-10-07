@@ -56,6 +56,31 @@
 * **Identificador Universal:** Vinculación por URL remota de GitHub (`remote.origin.url`), permitiendo trasladar proyectos entre distintos ordenadores sin romper la auditoría histórica.
 * **Exportación en Markdown:** Generación instantánea de informes forenses descargables con desglose completo por IA y cronología.
 
+### 5. 📂 Explorador de Disco, Verificador Inteligente y Favoritos (⭐)
+
+* **Explorador Visual de Carpetas:** En el modal de vincular proyecto, el botón **`📂 Examinar`** abre un explorador en vivo con navegación hacia arriba y adentro por todo el disco del sistema.
+* **Verificador Anti-Falsos Positivos:** El motor algorítmico `resolve_canonical_project` escala el árbol de directorios para detectar la raíz real del proyecto (`.git`, `package.json`, `pyproject.toml`, Ren'Py `game/options.rpy`), evitando que archivos individuales o subcarpetas de componentes se registren por error como proyectos nuevos.
+* **Proyectos Favoritos y Archivado:** Marca con **⭐** tus proyectos prioritarios para que aparezcan al tope del selector. Oculta con **👁️** carpetas secundarias o falsos positivos con 1 clic. Pestañas de filtrado: `📁 Todos`, `⭐ Favoritos`, `👁️ Ocultos`.
+
+### 6. ⚙️ Control de Visibilidad y Espacio de Trabajo Limpio
+
+* **Ocultar Entornos Desconectados:** Interruptor maestro para ocultar los 7 IDEs inactivos que no se están utilizando (ej: Claude, Cursor, Windsurf, Continue, Aider), dejando en pantalla únicamente las herramientas con sesiones reales.
+* **Checkboxes Personalizables:** Selección individual para activar o desactivar cualquiera de los 9 IDEs y ocultar modelos de IA no utilizados en el catálogo de tarifas.
+
+### 7. 🐍 SDK Python para Integración en Otros Proyectos
+
+* **Instrumentación en 2 Líneas:** Utiliza `TokenTracker` o `track_usage` para medir llamadas a LLMs en cualquier aplicación Python, FastAPI, script o juego en Ren'Py:
+
+  ```python
+  from tokenpulse import track_usage
+
+  track_usage(model="claude-3-7-sonnet", input_tokens=1500, output_tokens=300, project_name="MiProyecto")
+  ```
+
+* **Decorador Automático `@tracker.track()`:** Inspecciona respuestas de OpenAI y Anthropic extrayendo tokens automáticamente y registrándolos de forma tolerante a fallos en `.tokenpulse/events.jsonl` sin interrumpir la ejecución principal.
+* **Insignia Dinámica SVG:** Endpoint `/api/projects/{nombre}/badge.svg` para incrustar un Shield vectorial en cualquier `README.md`.
+* Consulta la [Guía Completa de Integración y Adopción Externa](GUIA_INTEGRACION_Y_ADOPCION.md).
+
 ---
 
 ## 🛠️ Arquitectura Multi-IDE Auditada
@@ -83,10 +108,12 @@ git clone https://github.com/MaciasSM2/TokenPulse-AI.git
 cd TokenPulse-AI
 ```
 
-### 2. Instalar Dependencias
+### 2. Instalar Dependencias (o modo editable)
 
 ```bash
 pip install -r requirements.txt
+# O instalación estándar de paquete:
+pip install -e .
 ```
 
 ### 3. Verificar Salud del Sistema
@@ -101,6 +128,8 @@ python check_health.py
 
 ```bash
 python main.py --port 4120
+# O mediante el comando CLI del paquete:
+tokenpulse serve --port 4120
 ```
 
 Abre en tu navegador:  
@@ -150,14 +179,16 @@ python -m tokenpulse log "Optimización de base de datos" --cmd "python -m alemb
 
 ```text
 TokenPulse-AI/
-├── tokenpulse/                  # Paquete CLI portátil y comandos del sistema
-│   ├── __init__.py              # Definición de versión v1.3.0
+├── tokenpulse/                  # Paquete CLI y SDK de medición para proyectos externos
+│   ├── __init__.py              # Exporta TokenTracker, track_usage y versión
 │   ├── __main__.py              # Punto de entrada `python -m tokenpulse`
-│   └── cli.py                   # Comandos: init, status, log, scan
+│   ├── cli.py                   # Comandos: init, status, log, scan, serve, cleanup
+│   └── tracker.py               # SDK Python tolerante a fallos para código de terceros
 ├── backend/                     # Motor backend FastAPI y conectores de datos
-│   ├── app.py                   # Endpoints REST (stats, projects, sessions, export)
+│   ├── app.py                   # Endpoints REST (stats, projects, sessions, filesystem, badge)
 │   ├── config.py                # Rutas del sistema y configuración centralizada
-│   ├── database.py              # Esquema SQLite, consultas analíticas y filtros temporales
+│   ├── database.py              # Esquema SQLite, consultas analíticas y consolidación
+│   ├── project_verifier.py      # Motor de resolución canónica y verificador anti-falsos positivos
 │   ├── pricing.py               # Motor de tarifas y normalizador multi-modelo
 │   ├── ide_detector.py          # Detección y sondeo de los 9 entornos de desarrollo
 │   ├── antigravity_collector.py # Conector de transcripciones Antigravity IDE
@@ -171,14 +202,16 @@ TokenPulse-AI/
 │   ├── sync_manager.py          # Gestor de sincronización periódica en segundo plano
 │   └── pricing_models.json      # Catálogo de precios de 41+ modelos de IA
 ├── frontend/                    # Interfaz web de usuario (SPA Reactiva)
-│   ├── index.html               # Vistas: Global, Proyecto, Hub IDEs, Barra Temporal
-│   ├── app.css                  # Estilos glassmorphism, responsive y dark mode
-│   └── app.js                   # Lógica reactiva, gráficos y navegación interactiva
+│   ├── index.html               # Vistas: Global, Proyecto, Hub IDEs, Explorador, Modales
+│   ├── app.css                  # Estilos glassmorphism, responsive, switches y dark mode
+│   └── app.js                   # Lógica reactiva, gráficos, favoritos, visibilidad y verificación
 ├── token_tracker.db             # Base de datos SQLite local unificada
 ├── check_health.py              # Diagnóstico preventivo y pruebas automáticas
 ├── main.py                      # Lanzador CLI y servidor uvicorn
+├── pyproject.toml               # Empaquetado estándar de Python (PEP 517 / PEP 518)
 ├── requirements.txt             # Dependencias de Python
 ├── DOCUMENTACION_PREVENTIVA.md  # Registro histórico de solicitudes y arquitectura
+├── GUIA_INTEGRACION_Y_ADOPCION.md# Manual completo de integración para terceros y SDK
 ├── PLAN_CONTADOR_TOKENS.md      # Plan maestro y fases de desarrollo
 └── README.md                    # Manual y documentación principal
 ```
