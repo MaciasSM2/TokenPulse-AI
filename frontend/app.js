@@ -615,6 +615,37 @@ async function loadPricing() {
   }
 }
 
+// Scan Projects Button
+const btnScanProjects = document.getElementById('btnScanProjects');
+if (btnScanProjects) {
+  btnScanProjects.addEventListener('click', async () => {
+    btnScanProjects.classList.add('spinning');
+    try {
+      const res = await fetch('/api/projects/scan', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({})
+      });
+      const data = await res.json();
+      alert(`¡Escaneo Completado! Se detectaron y vincularon ${data.count} proyectos.`);
+      await Promise.all([loadStats(), loadProjectsList(), loadSessions()]);
+    } catch (err) {
+      alert('Error durante el escaneo: ' + err.message);
+    } finally {
+      btnScanProjects.classList.remove('spinning');
+    }
+  });
+}
+
+// Export Project Report Button
+const btnExportProject = document.getElementById('btnExportProject');
+if (btnExportProject) {
+  btnExportProject.addEventListener('click', () => {
+    if (!currentSelectedProject) return;
+    window.open(`/api/projects/${encodeURIComponent(currentSelectedProject)}/export`, '_blank');
+  });
+}
+
 // Initial Boot
 async function initApp() {
   await Promise.all([loadStats(), loadProjectsList(), loadSessions()]);

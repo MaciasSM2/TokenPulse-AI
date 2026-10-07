@@ -125,3 +125,36 @@ Accede a:
   * Inicialización del repositorio Git local con rama `main`.
   * Publicación remota en GitHub con visibilidad pública (`gh repo create`).
 
+### 📌 Solicitud 5: Portabilidad Multi-Dispositivo y Auto-Descubrimiento
+* **Fecha:** 2026-10-06 22:10
+* **Objetivo:** Arquitectura para traslado entre computadores, ubicación óptima de proyectos y auto-descubrimiento.
+* **Componentes Implementados:**
+  * Comando CLI `python -m tokenpulse scan` y botón web para auto-descubrir y vincular proyectos en masa.
+  * Identificador universal e independiente de la máquina vía Git Remote URL (`git config --get remote.origin.url`).
+  * Endpoint y botón para exportar reportes de auditoría en Markdown (`/api/projects/{name}/export`).
+  * Manual de traslado y alojamiento de proyectos en nuevos dispositivos.
+
+---
+
+## 6. Guía de Portabilidad: Traslado a Nuevos Computadores
+
+### A. ¿Dónde deben alojarse los proyectos?
+Para garantizar máxima eficiencia, se aconseja mantener una **carpeta raíz unificada de desarrollo**:
+* **En Windows:** `C:\Users\<TuUsuario>\Documents\0. Programacion\` o `C:\Proyectos\`
+* **En Linux/Mac:** `~/Documents/Proyectos/` o `~/Developer/`
+
+Cada proyecto individual debe residir en su propia subcarpeta con su repositorio Git (ej: `CV-AUTO/`, `NOVA/`, `Grabadora_para_Escritores/`).
+
+### B. ¿Cómo viaja la contabilidad si cambias de equipo?
+1. **El Paquete Embebido (`.tokenpulse/`):**
+   * Al hacer `git push` y `git pull` de tus proyectos, la carpeta `.tokenpulse/` viaja con el código fuente en GitHub.
+2. **Identificador Portátil:**
+   * TokenPulse asocia cada proyecto a su URL de GitHub (`https://github.com/Usuario/Repo.git`), por lo que no importa si la ruta absoluta de Windows cambia de `C:\Users\Sebastian\...` a `C:\Users\Otro\...`.
+3. **Auto-Descubrimiento en 1 Clic:**
+   * Al descargar o clonar TokenPulse en un nuevo computador, simplemente ejecuta:
+     ```powershell
+     python -m tokenpulse scan "C:\ruta\donde\tienes\tus\proyectos"
+     ```
+   * O en el Dashboard Web, presiona el botón **"Escanear Proyectos"**. El sistema detectará automáticamente todos los repositorios y reconstruirá la auditoría en 1 segundo.
+
+

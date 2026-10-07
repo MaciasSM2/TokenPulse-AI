@@ -93,6 +93,22 @@ def api_log_project_event(project_name: str, payload: Dict[str, Any] = Body(...)
     )
     return {"status": "success", "cost_usd": cost_usd}
 
+@app.post("/api/projects/scan")
+def api_scan_projects(payload: Dict[str, Any] = Body(default={})):
+    """Escanea y auto-descubre proyectos en una carpeta raíz."""
+    from tokenpulse.cli import scan_projects
+    path = payload.get("path")
+    discovered = scan_projects(root_dir=path)
+    return {"status": "success", "count": len(discovered), "projects": discovered}
+
+@app.get("/api/projects/{project_name}/export")
+def api_export_project(project_name: str):
+    """Genera y descarga un reporte Markdown completo del proyecto."""
+    from tokenpulse.cli import export_project_markdown
+    from fastapi.responses import PlainTextResponse
+    md = export_project_markdown(project_name)
+    return PlainTextResponse(content=md, media_type="text/markdown")
+
 @app.get("/api/sessions")
 def get_sessions(
     limit: int = Query(50, ge=1, le=200),
