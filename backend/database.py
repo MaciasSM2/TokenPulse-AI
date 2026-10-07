@@ -173,7 +173,6 @@ class Database:
 
     def add_project_event(self, project_name: str, event_type: str, description: str, command_text: str = "", model_name: str = "", tokens_used: int = 0, cost_usd: float = 0.0, timestamp: Optional[str] = None, metadata: str = ""):
         project_name = clean_project_name(project_name)
-        ts = timestamp or "datetime('now')"
         sql = """
         INSERT INTO project_events (
             project_name, event_type, description, command_text, model_name, tokens_used, cost_usd, timestamp, metadata
@@ -197,11 +196,15 @@ class Database:
             )
             conn.commit()
 
-    def get_summary_stats(self) -> Dict[str, Any]:
+    def get_summary_stats(self, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Dict[str, Any]:
+        """
+        Calcula estadísticas consolidadas, soportando filtro de rango de fechas (start_date, end_date)
+        y ofreciendo desglose histórico completo (lifetime) y del día actual (today).
+        """
         with self.get_connection() as conn:
             cur = conn.cursor()
             
-            # Overall totals
+            # 1. Lifetime Totals (Histórico Completo)
             cur.execute("""
                 SELECT 
                     COUNT(*) as total_sessions,
@@ -212,10 +215,73 @@ class Database:
                     COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
                 FROM sessions
             """)
+            lifetime = dict(cur.fetchone())
+
+            # 2. Date Bounds (Fechas extremas y hoy)
+            cur.execute("""
+                SELECT 
+                    COALESCE(MIN(SUBSTR(start_time, 1, 10)), date('now')) as min_date,
+                    COALESCE(MAX(SUBSTR(start_time, 1, 10)), date('now')) as max_date,
+                    date('now') as today_utc,
+                    date('now', 'localtime') as today_local
+                FROM sessions
+                WHERE start_time IS NOT NULL AND start_time != ''
+            """)
+            bounds_row = cur.fetchone()
+            today_utc = bounds_row["today_utc"] if bounds_row else "2026-10-07"
+            today_local = bounds_row["today_local"] if bounds_row else "2026-10-06"
+            date_bounds = {
+                "min_date": bounds_row["min_date"] if bounds_row else "2026-01-01",
+                "max_date": bounds_row["max_date"] if bounds_row else "2026-10-07",
+                "today": today_local,
+                "today_local": today_local,
+                "today_utc": today_utc
+            }
+
+            # 3. Today's Specific Stats (Día presente / actual)
+            today_target = date_bounds["today"]
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as total_sessions,
+                    COALESCE(SUM(total_tokens), 0) as total_tokens,
+                    COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+                    COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+                    COALESCE(SUM(reasoning_tokens), 0) as total_reasoning_tokens,
+                    COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
+                FROM sessions
+                WHERE SUBSTR(start_time, 1, 10) = ? OR SUBSTR(start_time, 1, 10) = ?
+            """, (date_bounds["today_local"], date_bounds["today_utc"]))
+            today_stats = dict(cur.fetchone())
+
+            # 4. Build Filtered Query where clause
+            where_conditions = []
+            params = []
+
+            if start_date:
+                where_conditions.append("start_time IS NOT NULL AND start_time != '' AND SUBSTR(start_time, 1, 10) >= ?")
+                params.append(start_date)
+            if end_date:
+                where_conditions.append("start_time IS NOT NULL AND start_time != '' AND SUBSTR(start_time, 1, 10) <= ?")
+                params.append(end_date)
+
+            where_sql = ("WHERE " + " AND ".join(where_conditions)) if where_conditions else ""
+
+            # Filtered Period Totals
+            cur.execute(f"""
+                SELECT 
+                    COUNT(*) as total_sessions,
+                    COALESCE(SUM(total_tokens), 0) as total_tokens,
+                    COALESCE(SUM(input_tokens), 0) as total_input_tokens,
+                    COALESCE(SUM(output_tokens), 0) as total_output_tokens,
+                    COALESCE(SUM(reasoning_tokens), 0) as total_reasoning_tokens,
+                    COALESCE(SUM(cost_usd), 0.0) as total_cost_usd
+                FROM sessions
+                {where_sql}
+            """, params)
             overall = dict(cur.fetchone())
 
-            # IDE Breakdown
-            cur.execute("""
+            # IDE Breakdown (Filtered)
+            cur.execute(f"""
                 SELECT 
                     source_ide,
                     COUNT(*) as sessions,
@@ -224,67 +290,85 @@ class Database:
                     COALESCE(SUM(output_tokens), 0) as output_tokens,
                     COALESCE(SUM(cost_usd), 0.0) as cost_usd
                 FROM sessions
+                {where_sql}
                 GROUP BY source_ide
-            """)
+            """, params)
             by_ide = [dict(r) for r in cur.fetchall()]
 
-            # Model Breakdown
-            cur.execute("""
+            # Model Breakdown (Filtered)
+            cur.execute(f"""
                 SELECT 
                     model_name,
                     COUNT(*) as sessions,
                     COALESCE(SUM(total_tokens), 0) as tokens,
                     COALESCE(SUM(cost_usd), 0.0) as cost_usd
                 FROM sessions
+                {where_sql}
                 GROUP BY model_name
                 ORDER BY tokens DESC
-            """)
+            """, params)
             by_model = [dict(r) for r in cur.fetchall()]
 
-            # Project Breakdown
-            cur.execute("""
+            # Project Breakdown (Filtered)
+            cur.execute(f"""
                 SELECT 
                     project_name,
                     COUNT(*) as sessions,
                     COALESCE(SUM(total_tokens), 0) as tokens,
                     COALESCE(SUM(cost_usd), 0.0) as cost_usd
                 FROM sessions
+                {where_sql}
                 GROUP BY project_name
                 ORDER BY tokens DESC
                 LIMIT 15
-            """)
+            """, params)
             by_project = [dict(r) for r in cur.fetchall()]
 
             # Timeline (Daily)
-            cur.execute("""
+            timeline_where = where_sql
+            if not timeline_where:
+                timeline_where = "WHERE start_time IS NOT NULL AND start_time != ''"
+            else:
+                timeline_where += " AND start_time IS NOT NULL AND start_time != ''"
+
+            cur.execute(f"""
                 SELECT 
                     SUBSTR(start_time, 1, 10) as date,
                     COUNT(*) as sessions,
                     COALESCE(SUM(total_tokens), 0) as tokens,
                     COALESCE(SUM(cost_usd), 0.0) as cost_usd
                 FROM sessions
-                WHERE start_time IS NOT NULL AND start_time != ''
+                {timeline_where}
                 GROUP BY SUBSTR(start_time, 1, 10)
                 ORDER BY date ASC
-                LIMIT 30
-            """)
+                LIMIT 90
+            """, params)
             timeline = [dict(r) for r in cur.fetchall()]
 
             # Optimization stats (Caveman & Graphify)
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
-                    SUM(has_caveman) as caveman_sessions,
-                    SUM(has_graphify) as graphify_sessions
+                    COALESCE(SUM(has_caveman), 0) as caveman_sessions,
+                    COALESCE(SUM(has_graphify), 0) as graphify_sessions
                 FROM sessions
-            """)
+                {where_sql}
+            """, params)
             optim_row = cur.fetchone()
             optim = {
-                "caveman_sessions": optim_row["caveman_sessions"] or 0,
-                "graphify_sessions": optim_row["graphify_sessions"] or 0
+                "caveman_sessions": optim_row["caveman_sessions"] if optim_row else 0,
+                "graphify_sessions": optim_row["graphify_sessions"] if optim_row else 0
             }
 
             return {
                 "overall": overall,
+                "lifetime": lifetime,
+                "today_stats": today_stats,
+                "date_bounds": date_bounds,
+                "period": {
+                    "start_date": start_date,
+                    "end_date": end_date,
+                    "is_filtered": bool(start_date or end_date)
+                },
                 "by_ide": by_ide,
                 "by_model": by_model,
                 "by_project": by_project,
@@ -317,13 +401,25 @@ class Database:
             """)
             return [dict(r) for r in cur.fetchall()]
 
-    def get_project_detail(self, project_name: str) -> Optional[Dict[str, Any]]:
-        """Devuelve el desglose detallado de un proyecto: por cada IA, línea de tiempo e historial."""
+    def get_project_detail(self, project_name: str, start_date: Optional[str] = None, end_date: Optional[str] = None) -> Optional[Dict[str, Any]]:
+        """Devuelve el desglose detallado de un proyecto con soporte de filtro de fechas."""
         with self.get_connection() as conn:
             cur = conn.cursor()
+
+            # Where filter
+            p_where = ["project_name = ?"]
+            params = [project_name]
+            if start_date:
+                p_where.append("start_time IS NOT NULL AND SUBSTR(start_time, 1, 10) >= ?")
+                params.append(start_date)
+            if end_date:
+                p_where.append("start_time IS NOT NULL AND SUBSTR(start_time, 1, 10) <= ?")
+                params.append(end_date)
+
+            where_sql = "WHERE " + " AND ".join(p_where)
             
-            # 1. Resumen general del proyecto
-            cur.execute("""
+            # 1. Resumen general del proyecto en el periodo
+            cur.execute(f"""
                 SELECT 
                     project_name,
                     MAX(project_path) as project_path,
@@ -336,16 +432,43 @@ class Database:
                     MIN(start_time) as first_session_date,
                     MAX(start_time) as last_session_date
                 FROM sessions
-                WHERE project_name = ?
-            """, (project_name,))
+                {where_sql}
+            """, params)
             base_row = cur.fetchone()
             if not base_row or not base_row["project_name"]:
-                return None
-            
-            summary = dict(base_row)
+                # If filtered yielded 0, query lifetime summary so project name and path remain visible
+                cur.execute("SELECT project_name, MAX(project_path) as project_path FROM sessions WHERE project_name = ?", (project_name,))
+                alt = cur.fetchone()
+                if not alt or not alt["project_name"]:
+                    return None
+                summary = {
+                    "project_name": alt["project_name"],
+                    "project_path": alt["project_path"],
+                    "session_count": 0,
+                    "total_tokens": 0,
+                    "input_tokens": 0,
+                    "output_tokens": 0,
+                    "reasoning_tokens": 0,
+                    "total_cost_usd": 0.0,
+                    "first_session_date": "--",
+                    "last_session_date": "--"
+                }
+            else:
+                summary = dict(base_row)
+
+            # Lifetime project summary
+            cur.execute("""
+                SELECT 
+                    COUNT(*) as lifetime_sessions,
+                    COALESCE(SUM(total_tokens), 0) as lifetime_tokens,
+                    COALESCE(SUM(cost_usd), 0.0) as lifetime_cost_usd
+                FROM sessions
+                WHERE project_name = ?
+            """, (project_name,))
+            proj_life = dict(cur.fetchone())
 
             # 2. Desglose detallado por CADA Inteligencia Artificial (Modelos) en este proyecto
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     model_name,
                     COUNT(*) as session_count,
@@ -355,14 +478,14 @@ class Database:
                     COALESCE(SUM(total_tokens), 0) as total_tokens,
                     COALESCE(SUM(cost_usd), 0.0) as cost_usd
                 FROM sessions
-                WHERE project_name = ?
+                {where_sql}
                 GROUP BY model_name
                 ORDER BY total_tokens DESC
-            """, (project_name,))
+            """, params)
             models_breakdown = [dict(r) for r in cur.fetchall()]
 
-            # 3. Línea temporal histórica del proyecto (desde que comenzó hasta la actualidad)
-            cur.execute("""
+            # 3. Línea temporal histórica del proyecto
+            cur.execute(f"""
                 SELECT 
                     SUBSTR(start_time, 1, 10) as date,
                     COUNT(*) as session_count,
@@ -371,43 +494,61 @@ class Database:
                     COALESCE(SUM(output_tokens), 0) as output_tokens,
                     COALESCE(SUM(cost_usd), 0.0) as cost_usd
                 FROM sessions
-                WHERE project_name = ? AND start_time IS NOT NULL AND start_time != ''
+                {where_sql} AND start_time IS NOT NULL AND start_time != ''
                 GROUP BY SUBSTR(start_time, 1, 10)
                 ORDER BY date ASC
-            """, (project_name,))
+            """, params)
             timeline = [dict(r) for r in cur.fetchall()]
 
             # 4. Sesiones y procesos registrados en este proyecto
-            cur.execute("""
+            cur.execute(f"""
                 SELECT 
                     id, source_ide, session_id, title, model_name,
                     input_tokens, output_tokens, reasoning_tokens, total_tokens,
                     cost_usd, start_time, end_time, has_caveman, has_graphify
                 FROM sessions
-                WHERE project_name = ?
+                {where_sql}
                 ORDER BY start_time DESC
                 LIMIT 100
-            """, (project_name,))
+            """, params)
             sessions = [dict(r) for r in cur.fetchall()]
 
             # 5. Eventos manuales o de comandos registrados para el proyecto
-            cur.execute("""
+            ev_params = [project_name]
+            ev_where = ["project_name = ?"]
+            if start_date:
+                ev_where.append("SUBSTR(timestamp, 1, 10) >= ?")
+                ev_params.append(start_date)
+            if end_date:
+                ev_where.append("SUBSTR(timestamp, 1, 10) <= ?")
+                ev_params.append(end_date)
+
+            cur.execute(f"""
                 SELECT * FROM project_events
-                WHERE project_name = ?
+                WHERE {" AND ".join(ev_where)}
                 ORDER BY timestamp DESC
                 LIMIT 50
-            """, (project_name,))
+            """, ev_params)
             events = [dict(r) for r in cur.fetchall()]
 
             return {
                 "summary": summary,
+                "lifetime": proj_life,
                 "models": models_breakdown,
                 "timeline": timeline,
                 "sessions": sessions,
                 "events": events
             }
 
-    def list_sessions(self, limit: int = 50, ide_filter: Optional[str] = None, search: Optional[str] = None, project_filter: Optional[str] = None) -> List[Dict[str, Any]]:
+    def list_sessions(
+        self, 
+        limit: int = 50, 
+        ide_filter: Optional[str] = None, 
+        search: Optional[str] = None, 
+        project_filter: Optional[str] = None,
+        start_date: Optional[str] = None,
+        end_date: Optional[str] = None
+    ) -> List[Dict[str, Any]]:
         query = "SELECT * FROM sessions WHERE 1=1"
         params = []
 
@@ -418,6 +559,14 @@ class Database:
         if project_filter:
             query += " AND project_name = ?"
             params.append(project_filter)
+
+        if start_date:
+            query += " AND (start_time IS NOT NULL AND start_time != '' AND SUBSTR(start_time, 1, 10) >= ?)"
+            params.append(start_date)
+
+        if end_date:
+            query += " AND (start_time IS NOT NULL AND start_time != '' AND SUBSTR(start_time, 1, 10) <= ?)"
+            params.append(end_date)
 
         if search:
             query += " AND (title LIKE ? OR project_name LIKE ? OR model_name LIKE ?)"

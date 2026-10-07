@@ -1,4 +1,4 @@
-// TokenPulse AI - Multi-IDE & Multi-Model Project-Centric Logic
+// TokenPulse AI - Multi-IDE, Multi-Model & Date-Range Project-Centric Logic
 
 let currentViewMode = 'global'; // 'global' | 'project'
 let currentSelectedProject = null;
@@ -9,6 +9,12 @@ let allProjectsList = [];
 let cachedPricingModels = {};
 let currentPricingProvider = 'all';
 
+// Date Filter State (Defaults to 'today' as requested)
+let currentPreset = 'today';
+let currentStartDate = null;
+let currentEndDate = null;
+let dateBounds = null; // { min_date, max_date, today }
+
 // DOM Elements: Views
 const globalViewContainer = document.getElementById('globalViewContainer');
 const projectViewContainer = document.getElementById('projectViewContainer');
@@ -18,17 +24,33 @@ const projectSelect = document.getElementById('projectSelect');
 const btnBackToGlobal = document.getElementById('btnBackToGlobal');
 const ideHubContainer = document.getElementById('ideHubContainer');
 
+// DOM Elements: Date Range Filter Bar
+const globalPresetButtons = document.getElementById('globalPresetButtons');
+const projPresetButtons = document.getElementById('projPresetButtons');
+const dateRangeStart = document.getElementById('dateRangeStart');
+const dateRangeEnd = document.getElementById('dateRangeEnd');
+const btnApplyCustomDates = document.getElementById('btnApplyCustomDates');
+const dateActivePillText = document.getElementById('dateActivePillText');
+const projDateActivePillText = document.getElementById('projDateActivePillText');
+
 // DOM Elements: Global KPIs
+const kpiLabelCost = document.getElementById('kpiLabelCost');
 const kpiTotalCost = document.getElementById('kpiTotalCost');
 const kpiCostAntigravity = document.getElementById('kpiCostAntigravity');
 const kpiCostOpenCode = document.getElementById('kpiCostOpenCode');
+const kpiCostLifetime = document.getElementById('kpiCostLifetime');
+
+const kpiLabelTokens = document.getElementById('kpiLabelTokens');
 const kpiTotalTokens = document.getElementById('kpiTotalTokens');
 const kpiInTokens = document.getElementById('kpiInTokens');
 const kpiOutTokens = document.getElementById('kpiOutTokens');
-const kpiReasonTokens = document.getElementById('kpiReasonTokens');
+const kpiTokensLifetime = document.getElementById('kpiTokensLifetime');
+
+const kpiLabelSessions = document.getElementById('kpiLabelSessions');
 const kpiTotalSessions = document.getElementById('kpiTotalSessions');
 const kpiSessionsAntigravity = document.getElementById('kpiSessionsAntigravity');
 const kpiSessionsOpenCode = document.getElementById('kpiSessionsOpenCode');
+const kpiSessionsLifetime = document.getElementById('kpiSessionsLifetime');
 
 const syncStatusText = document.getElementById('syncStatusText');
 const lastSyncTime = document.getElementById('lastSyncTime');
@@ -45,7 +67,9 @@ const sessionSearch = document.getElementById('sessionSearch');
 // Project View Elements
 const projHeroName = document.getElementById('projHeroName');
 const projHeroPath = document.getElementById('projHeroPath');
+const projLabelCost = document.getElementById('projLabelCost');
 const projKpiCost = document.getElementById('projKpiCost');
+const projCostLifetime = document.getElementById('projCostLifetime');
 const projKpiTokens = document.getElementById('projKpiTokens');
 const projKpiIn = document.getElementById('projKpiIn');
 const projKpiOut = document.getElementById('projKpiOut');
@@ -141,6 +165,13 @@ function formatDate(isoStr) {
   }
 }
 
+function formatDateOnly(d) {
+  const year = d.getFullYear();
+  const month = String(d.getMonth() + 1).padStart(2, '0');
+  const day = String(d.getDate()).padStart(2, '0');
+  return `${year}-${month}-${day}`;
+}
+
 function escapeHtml(str) {
   if (!str) return '';
   return String(str)
@@ -148,6 +179,75 @@ function escapeHtml(str) {
     .replace(/</g, '&lt;')
     .replace(/>/g, '&gt;')
     .replace(/"/g, '&quot;');
+}
+
+// Date Range Calculation Logic
+function computeDatesForPreset(preset) {
+  const baseToday = (dateBounds && dateBounds.today) ? new Date(dateBounds.today + 'T12:00:00') : new Date();
+  const todayStr = formatDateOnly(baseToday);
+
+  if (preset === 'today') {
+    const startStr = (dateBounds && dateBounds.today_local) ? dateBounds.today_local : todayStr;
+    const endStr = (dateBounds && dateBounds.today_utc) ? dateBounds.today_utc : todayStr;
+    return { start: startStr, end: endStr, label: `Hoy (${startStr})` };
+  } else if (preset === '3days') {
+    const s = new Date(baseToday);
+    s.setDate(s.getDate() - 2);
+    const endStr = (dateBounds && dateBounds.today_utc) ? dateBounds.today_utc : todayStr;
+    return { start: formatDateOnly(s), end: endStr, label: `3 Días (${formatDateOnly(s)} a ${endStr})` };
+  } else if (preset === '7days') {
+    const s = new Date(baseToday);
+    s.setDate(s.getDate() - 6);
+    const endStr = (dateBounds && dateBounds.today_utc) ? dateBounds.today_utc : todayStr;
+    return { start: formatDateOnly(s), end: endStr, label: `1 Semana (${formatDateOnly(s)} a ${endStr})` };
+  } else if (preset === '30days') {
+    const s = new Date(baseToday);
+    s.setDate(s.getDate() - 29);
+    const endStr = (dateBounds && dateBounds.today_utc) ? dateBounds.today_utc : todayStr;
+    return { start: formatDateOnly(s), end: endStr, label: `1 Mes (${formatDateOnly(s)} a ${endStr})` };
+  } else if (preset === 'all') {
+    return { start: null, end: null, label: 'Todo el Histórico (Ilimitado)' };
+  }
+  return { start: currentStartDate, end: currentEndDate, label: `${currentStartDate || '--'} a ${currentEndDate || '--'}` };
+}
+
+function setDatePreset(preset, customStart = null, customEnd = null) {
+  currentPreset = preset;
+
+  if (preset === 'custom') {
+    currentStartDate = customStart;
+    currentEndDate = customEnd;
+    const label = `${customStart || 'Inicio'} ➔ ${customEnd || 'Hoy'}`;
+    updateDateUI(preset, customStart, customEnd, label);
+  } else {
+    const res = computeDatesForPreset(preset);
+    currentStartDate = res.start;
+    currentEndDate = res.end;
+    updateDateUI(preset, res.start, res.end, res.label);
+  }
+
+  // Reload current view
+  if (currentViewMode === 'global') {
+    loadStats();
+    loadSessions();
+  } else if (currentSelectedProject) {
+    loadProjectDetail(currentSelectedProject);
+  }
+}
+
+function updateDateUI(preset, start, end, label) {
+  // Update inputs
+  if (dateRangeStart && start) dateRangeStart.value = start;
+  if (dateRangeEnd && end) dateRangeEnd.value = end;
+
+  // Update pill indicators
+  if (dateActivePillText) dateActivePillText.textContent = label;
+  if (projDateActivePillText) projDateActivePillText.textContent = label;
+
+  // Update tab highlights on global and project preset buttons
+  document.querySelectorAll('.preset-tab').forEach(btn => {
+    btn.classList.toggle('active', btn.dataset.preset === preset);
+  });
 }
 
 // Mode Switching
@@ -178,12 +278,32 @@ function switchViewMode(mode, projectName = null) {
   }
 }
 
-// Data Fetching: Global
+// Data Fetching: Global Stats
 async function loadStats() {
   try {
-    const res = await fetch('/api/stats');
+    let url = '/api/stats';
+    const params = [];
+    if (currentStartDate) params.push(`start_date=${encodeURIComponent(currentStartDate)}`);
+    if (currentEndDate) params.push(`end_date=${encodeURIComponent(currentEndDate)}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Error al obtener estadísticas');
     const data = await res.json();
+
+    // Store date bounds if received
+    if (data.date_bounds) {
+      dateBounds = data.date_bounds;
+      if (dateRangeStart && !dateRangeStart.min) {
+        dateRangeStart.min = dateBounds.min_date;
+        dateRangeStart.max = dateBounds.today;
+      }
+      if (dateRangeEnd && !dateRangeEnd.min) {
+        dateRangeEnd.min = dateBounds.min_date;
+        dateRangeEnd.max = dateBounds.today;
+      }
+    }
+
     renderStats(data);
   } catch (err) {
     console.error('Error fetching stats:', err);
@@ -264,7 +384,11 @@ async function loadProjectsList() {
 
 async function loadSessions() {
   try {
-    const url = `/api/sessions?limit=60&ide=${encodeURIComponent(currentIdeFilter)}${searchQuery ? `&search=${encodeURIComponent(searchQuery)}` : ''}`;
+    let url = `/api/sessions?limit=80&ide=${encodeURIComponent(currentIdeFilter)}`;
+    if (searchQuery) url += `&search=${encodeURIComponent(searchQuery)}`;
+    if (currentStartDate) url += `&start_date=${encodeURIComponent(currentStartDate)}`;
+    if (currentEndDate) url += `&end_date=${encodeURIComponent(currentEndDate)}`;
+
     const res = await fetch(url);
     if (!res.ok) throw new Error('Error al obtener sesiones');
     const data = await res.json();
@@ -282,7 +406,13 @@ async function loadProjectDetail(projectName) {
     projHeroName.textContent = projectName;
     projHeroPath.textContent = 'Cargando información...';
 
-    const res = await fetch(`/api/projects/${encodeURIComponent(projectName)}`);
+    let url = `/api/projects/${encodeURIComponent(projectName)}`;
+    const params = [];
+    if (currentStartDate) params.push(`start_date=${encodeURIComponent(currentStartDate)}`);
+    if (currentEndDate) params.push(`end_date=${encodeURIComponent(currentEndDate)}`);
+    if (params.length > 0) url += '?' + params.join('&');
+
+    const res = await fetch(url);
     if (!res.ok) throw new Error('Error al cargar detalle del proyecto');
     const data = await res.json();
     renderProjectDetail(data);
@@ -295,6 +425,7 @@ async function loadProjectDetail(projectName) {
 // Rendering: Project Detail
 function renderProjectDetail(detail) {
   const sm = detail.summary || {};
+  const life = detail.lifetime || {};
   const models = detail.models || [];
   const timeline = detail.timeline || [];
   const sessions = detail.sessions || [];
@@ -305,6 +436,13 @@ function renderProjectDetail(detail) {
 
   // KPIs
   projKpiCost.textContent = formatUSD(sm.total_cost_usd);
+  if (projCostLifetime) {
+    projCostLifetime.textContent = formatUSD(life.lifetime_cost_usd || sm.total_cost_usd);
+  }
+  if (projLabelCost) {
+    projLabelCost.textContent = (currentPreset === 'today') ? 'Gasto de Hoy en este Proyecto' : 'Gasto del Período';
+  }
+
   projKpiTokens.textContent = formatNumber(sm.total_tokens);
   projKpiIn.textContent = formatNumber(sm.input_tokens);
   projKpiOut.textContent = formatNumber(sm.output_tokens);
@@ -317,7 +455,7 @@ function renderProjectDetail(detail) {
   // Render AI Models Breakdown Table
   const totalProjTokens = sm.total_tokens || 1;
   if (models.length === 0) {
-    projModelsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">Sin modelos registrados para este proyecto.</td></tr>`;
+    projModelsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">Sin consumo registrado para este proyecto en el período seleccionado.</td></tr>`;
   } else {
     projModelsTableBody.innerHTML = models.map(m => {
       const pct = Math.round((m.total_tokens / totalProjTokens) * 100);
@@ -347,7 +485,7 @@ function renderProjectDetail(detail) {
 
   // Render Historical Timeline
   if (timeline.length === 0) {
-    projTimelineWrapper.innerHTML = `<p class="panel-hint" style="margin: auto;">No hay suficiente historial para graficar.</p>`;
+    projTimelineWrapper.innerHTML = `<p class="panel-hint" style="margin: auto;">No hay suficiente actividad en este rango para graficar.</p>`;
   } else {
     const maxTokens = Math.max(...timeline.map(t => t.tokens), 1);
     projTimelineWrapper.innerHTML = timeline.map(t => {
@@ -364,7 +502,7 @@ function renderProjectDetail(detail) {
 
   // Render Sessions and Processes
   if (sessions.length === 0) {
-    projSessionsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">Sin sesiones registradas.</td></tr>`;
+    projSessionsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">Sin sesiones registradas en este período.</td></tr>`;
   } else {
     projSessionsTableBody.innerHTML = sessions.map(s => {
       const ideInfo = getIdeInfo(s.source_ide);
@@ -428,16 +566,52 @@ function renderProjectsListWidget() {
 
 function renderStats(data) {
   const overall = data.overall || {};
+  const lifetime = data.lifetime || {};
   const byIde = data.by_ide || [];
   const byModel = data.by_model || [];
   const timeline = data.timeline || [];
 
+  // Dynamic KPI Labels based on active preset
+  if (kpiLabelCost) {
+    if (currentPreset === 'today') {
+      kpiLabelCost.textContent = 'Gasto de Hoy';
+      kpiLabelTokens.textContent = 'Tokens de Hoy';
+      kpiLabelSessions.textContent = 'Sesiones de Hoy';
+    } else if (currentPreset === '3days') {
+      kpiLabelCost.textContent = 'Gasto (3 Días)';
+      kpiLabelTokens.textContent = 'Tokens (3 Días)';
+      kpiLabelSessions.textContent = 'Sesiones (3 Días)';
+    } else if (currentPreset === '7days') {
+      kpiLabelCost.textContent = 'Gasto (1 Semana)';
+      kpiLabelTokens.textContent = 'Tokens (1 Semana)';
+      kpiLabelSessions.textContent = 'Sesiones (1 Semana)';
+    } else if (currentPreset === '30days') {
+      kpiLabelCost.textContent = 'Gasto (1 Mes)';
+      kpiLabelTokens.textContent = 'Tokens (1 Mes)';
+      kpiLabelSessions.textContent = 'Sesiones (1 Mes)';
+    } else if (currentPreset === 'all') {
+      kpiLabelCost.textContent = 'Gasto Total Acumulado';
+      kpiLabelTokens.textContent = 'Tokens Totales Consumidos';
+      kpiLabelSessions.textContent = 'Sesiones de Desarrollo';
+    } else {
+      kpiLabelCost.textContent = 'Gasto del Período';
+      kpiLabelTokens.textContent = 'Tokens del Período';
+      kpiLabelSessions.textContent = 'Sesiones del Período';
+    }
+  }
+
+  // Values: Period totals
   kpiTotalCost.textContent = formatUSD(overall.total_cost_usd);
+  if (kpiCostLifetime) kpiCostLifetime.textContent = formatUSD(lifetime.total_cost_usd);
+
   kpiTotalTokens.textContent = formatNumber(overall.total_tokens);
+  if (kpiTokensLifetime) kpiTokensLifetime.textContent = formatNumber(lifetime.total_tokens);
+
   kpiInTokens.textContent = formatNumber(overall.total_input_tokens);
   kpiOutTokens.textContent = formatNumber(overall.total_output_tokens);
-  kpiReasonTokens.textContent = formatNumber(overall.total_reasoning_tokens);
+
   kpiTotalSessions.textContent = formatNumber(overall.total_sessions);
+  if (kpiSessionsLifetime) kpiSessionsLifetime.textContent = formatNumber(lifetime.total_sessions);
 
   let agCost = 0, agSessions = 0;
   let ocCost = 0, ocSessions = 0;
@@ -464,7 +638,7 @@ function renderStats(data) {
   // Multi-IDE Comparison Bars
   const totalTokens = (overall.total_tokens || 1);
   if (byIde.length === 0) {
-    ideCompareContainer.innerHTML = `<p class="panel-hint">Sin datos de IDEs.</p>`;
+    ideCompareContainer.innerHTML = `<p class="panel-hint">Sin actividad en este período para los IDEs.</p>`;
   } else {
     ideCompareContainer.innerHTML = byIde.map(item => {
       const info = getIdeInfo(item.source_ide);
@@ -485,7 +659,7 @@ function renderStats(data) {
 
   // Top Models
   if (byModel.length === 0) {
-    modelsContainer.innerHTML = `<p class="panel-hint">Sin datos de modelos.</p>`;
+    modelsContainer.innerHTML = `<p class="panel-hint">Sin datos de modelos en este período.</p>`;
   } else {
     modelsContainer.innerHTML = byModel.slice(0, 6).map(m => `
       <div class="model-row">
@@ -502,7 +676,7 @@ function renderStats(data) {
 
   // Timeline
   if (timeline.length === 0) {
-    timelineChartWrapper.innerHTML = `<p class="panel-hint" style="margin: auto;">No hay suficiente historial para graficar.</p>`;
+    timelineChartWrapper.innerHTML = `<p class="panel-hint" style="margin: auto;">No hay suficiente actividad en este rango para graficar.</p>`;
   } else {
     const maxTokens = Math.max(...timeline.map(t => t.tokens), 1);
     timelineChartWrapper.innerHTML = timeline.map(t => {
@@ -520,7 +694,7 @@ function renderStats(data) {
 
 function renderSessions(sessions) {
   if (!sessions || sessions.length === 0) {
-    sessionsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">No se encontraron sesiones para los filtros seleccionados.</td></tr>`;
+    sessionsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">No se encontraron sesiones para los filtros de fecha y entorno seleccionados.</td></tr>`;
     return;
   }
 
@@ -558,6 +732,32 @@ projectSelect.addEventListener('change', (e) => {
     switchViewMode('global');
   }
 });
+
+// Preset Buttons Event Listeners
+function setupPresetButtonListeners() {
+  document.querySelectorAll('.preset-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      const preset = btn.dataset.preset;
+      if (preset) {
+        setDatePreset(preset);
+      }
+    });
+  });
+
+  if (btnApplyCustomDates) {
+    btnApplyCustomDates.addEventListener('click', () => {
+      const start = dateRangeStart ? dateRangeStart.value : null;
+      const end = dateRangeEnd ? dateRangeEnd.value : null;
+
+      if (!start && !end) {
+        setDatePreset('all');
+        return;
+      }
+
+      setDatePreset('custom', start, end);
+    });
+  }
+}
 
 // Sync Button
 btnSync.addEventListener('click', async () => {
@@ -772,7 +972,24 @@ if (btnExportProject) {
 
 // Initial Boot
 async function initApp() {
-  await Promise.all([loadStats(), loadIdesHub(), loadProjectsList(), loadSessions(), loadPricing()]);
+  setupPresetButtonListeners();
+
+  // First fetch stats to get server dates and bounds
+  await loadStats();
+
+  // Initialize preset to 'today' by default
+  const todayPreset = computeDatesForPreset('today');
+  currentStartDate = todayPreset.start;
+  currentEndDate = todayPreset.end;
+  updateDateUI('today', todayPreset.start, todayPreset.end, todayPreset.label);
+
+  await Promise.all([
+    loadStats(),
+    loadIdesHub(),
+    loadProjectsList(),
+    loadSessions(),
+    loadPricing()
+  ]);
 
   // Check URL query param ?project=...
   const urlParams = new URLSearchParams(window.location.search);

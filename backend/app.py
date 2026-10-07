@@ -41,9 +41,12 @@ app.add_middleware(
 frontend_dir = BASE_DIR / "frontend"
 
 @app.get("/api/stats")
-def get_stats():
-    """Retorna métricas consolidadas, desglose por IDE, modelo, proyectos y línea temporal."""
-    stats = db.get_summary_stats()
+def get_stats(
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None)
+):
+    """Retorna métricas consolidadas, desglose por IDE, modelo, proyectos y línea temporal, con soporte de filtro de fechas."""
+    stats = db.get_summary_stats(start_date=start_date, end_date=end_date)
     stats["last_sync"] = sync_manager.last_sync_result or {
         "timestamp": sync_manager.last_sync_time,
         "status": "idle"
@@ -73,9 +76,13 @@ def get_projects():
     return db.get_projects_list()
 
 @app.get("/api/projects/{project_name}")
-def get_project_detail(project_name: str):
+def get_project_detail(
+    project_name: str,
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None)
+):
     """Retorna auditoría completa de un proyecto específico: desglose por cada IA, timeline y sesiones."""
-    detail = db.get_project_detail(project_name)
+    detail = db.get_project_detail(project_name, start_date=start_date, end_date=end_date)
     if not detail:
         raise HTTPException(status_code=404, detail=f"Proyecto '{project_name}' no encontrado")
     return detail
@@ -133,10 +140,19 @@ def get_sessions(
     limit: int = Query(50, ge=1, le=200),
     ide: Optional[str] = Query("all"),
     project: Optional[str] = Query(None),
-    search: Optional[str] = Query(None)
+    search: Optional[str] = Query(None),
+    start_date: Optional[str] = Query(None),
+    end_date: Optional[str] = Query(None)
 ):
-    """Lista las sesiones filtradas por IDE, proyecto o búsqueda."""
-    return db.list_sessions(limit=limit, ide_filter=ide, project_filter=project, search=search)
+    """Lista las sesiones filtradas por IDE, proyecto, búsqueda o rango de fechas."""
+    return db.list_sessions(
+        limit=limit, 
+        ide_filter=ide, 
+        project_filter=project, 
+        search=search,
+        start_date=start_date,
+        end_date=end_date
+    )
 
 @app.post("/api/sync")
 def trigger_sync():

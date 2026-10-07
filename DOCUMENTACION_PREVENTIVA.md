@@ -208,3 +208,46 @@ Para validar que todos los colectores, la base de datos y el servidor web funcio
 python check_health.py
 ```
 Salida esperada: `5/5 verificaciones superadas con éxito`, reportando estado 100% operativo.
+
+---
+
+### 📌 Solicitud 7: Filtro Temporal y Selector de Fechas (Auditoría por Día y Rango Histórico)
+* **Fecha:** 2026-10-06 23:25
+* **Objetivo:** 
+  1. Mostrar de forma predeterminada al abrir la aplicación el **consumo del día actual (Hoy / Día Presente)** en tokens y costos.
+  2. Ofrecer un selector de calendario con rango de fechas (`Desde` / `Hasta`) con retroactividad ilimitada hasta el inicio del registro histórico del proyecto.
+  3. Proveer filtros rápidos de un solo clic para **1 Día (Hoy)**, **3 Días**, **1 Semana (7 días)**, **1 Mes (30 días)** y **Todo el Histórico (Ilimitado)**.
+* **Componentes Implementados:**
+  * **Motor de Consultas y Base de Datos (`backend/database.py`):**
+    * Integración de parámetros `start_date` y `end_date` (`YYYY-MM-DD`) en `get_summary_stats`, `get_project_detail` y `list_sessions`.
+    * Doble cálculo estadístico:
+      * `overall`: métricas agregadas del período seleccionado.
+      * `lifetime`: métricas históricas totales de toda la vida del proyecto para contraste inmediato.
+      * `today_stats`: desglose específico del día en curso.
+      * `date_bounds`: descubrimiento dinámico de la fecha mínima (`2026-05-16`), fecha máxima (`2026-10-07`), fecha local del sistema y fecha UTC.
+    * Filtrado cruzado de gráficos de línea temporal (`timeline`), distribución por modelo, entornos/IDEs y tabla de sesiones.
+  * **Endpoints de API (`backend/app.py`):**
+    * Parámetros query `start_date` y `end_date` admitidos en `/api/stats`, `/api/projects/{project_name}` y `/api/sessions`.
+  * **Diseño e Interfaz Web (`frontend/index.html`, `frontend/app.css`, `frontend/app.js`):**
+    * **Barra de Rango Temporal Glassmorphism:**
+      * Botones de preset rápido con iluminación de estado activo (`⚡ Hoy (Día Presente)`, `3 Días`, `1 Semana`, `1 Mes`, `Todo el Histórico`).
+      * Entradas de calendario adaptativas con esquema oscuro (`color-scheme: dark`) con validación de límites automáticos `min` y `max`.
+      * Botón `Aplicar Rango` y píldora informativa dinámica `#dateActivePill` con badge de período auditado.
+    * **Carga Inicial Enfocada en el Día Presente:**
+      * Al abrir TokenPulse AI, el filtro arranca automáticamente en modo `today`, auditando las sesiones generadas en la jornada actual y mostrando en las tarjetas KPI el gasto del día junto a un sub-texto comparativo con el acumulado histórico total.
+    * **Filtros Temporales en Vista de Proyecto:**
+      * Presets reactivos (`#projPresetButtons`) también disponibles al inspeccionar proyectos individuales, recalculando eventos, modelos y tendencias dentro de la ventana de tiempo elegida.
+
+---
+
+## 9. Resumen de Presets Temporales Disponibles
+
+| Preset | Rango de Días | Finalidad | Comportamiento en Carga |
+| :--- | :--- | :--- | :--- |
+| **⚡ Hoy (1 Día)** | Día presente (Local / UTC) | Auditar el costo y volumen de tokens de la jornada actual de trabajo. | **Predeterminado al abrir el aplicativo** |
+| **3 Días** | Últimas 72 horas | Revisar el progreso reciente del sprint o fin de semana. | Reactivo al clic |
+| **1 Semana** | Últimos 7 días | Control semanal de presupuesto y productividad de código. | Reactivo al clic |
+| **1 Mes** | Últimos 30 días | Facturación mensual proyectada y comparativa por modelo. | Reactivo al clic |
+| **Todo el Histórico** | Desde `2026-05-16` hasta hoy | Panorama global completo y acumulado del desarrollador. | Ilimitado |
+| **Personalizado (Calendario)** | Rango libre `Desde` - `Hasta` | Auditoría forense de fechas o entregas específicas. | Ilimitado |
+
