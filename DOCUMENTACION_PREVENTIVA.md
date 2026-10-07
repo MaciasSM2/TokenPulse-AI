@@ -158,3 +158,53 @@ Cada proyecto individual debe residir en su propia subcarpeta con su repositorio
    * O en el Dashboard Web, presiona el botón **"Escanear Proyectos"**. El sistema detectará automáticamente todos los repositorios y reconstruirá la auditoría en 1 segundo.
 
 
+
+---
+
+### 📌 Solicitud 6: Expansión Multi-Modelo y Multi-IDE (Auditoría Universal de IA)
+* **Fecha:** 2026-10-06 22:55
+* **Objetivo:** Extender TokenPulse AI más allá de Antigravity y OpenCode, incorporando todas las inteligencias artificiales modernas y todos los IDEs y entornos de desarrollo AI detectables en el flujo de trabajo.
+* **Componentes Implementados:**
+  * **Catálogo de 41+ Modelos de IA:**
+    * OpenAI (o1, o3-mini, GPT-4o, GPT-4o Mini, GPT-4 Turbo, GPT-3.5).
+    * Anthropic Claude (Claude 3.7 Sonnet con Hybrid Reasoning, Claude 3.5 Sonnet, Claude 3.5 Haiku, Claude 3 Opus).
+    * Google Gemini (Gemini 2.5 Pro, 3.8 Flash, 2.0 Flash, 2.0 Flash Thinking, 1.5 Pro, 1.5 Flash).
+    * DeepSeek (DeepSeek-V3 `deepseek-chat`, DeepSeek-R1 `deepseek-reasoner`, DeepSeek Coder V2).
+    * Meta Llama (Llama 3.3 70B, Llama 3.1 405B, 70B, 8B).
+    * Mistral AI (Codestral 2501, Mistral Large 2, Mistral Small).
+    * Alibaba Qwen (Qwen 2.5 Coder 32B, 7B, Qwen 2.5 72B).
+    * Ollama / Local ($0.00 USD para inferencia offline en hardware local).
+    * Modelos Gratuitos (DeepSeek V4 Flash Free, Nemotron 3 Ultra Free, Mimo V2.5 Free, Big Pickle).
+  * **Arquitectura de Detección y Colectores Multi-IDE:**
+    * `backend/ide_detector.py`: Servicio de detección que audita Antigravity, OpenCode, Claude Code, Ollama, VS Code (Cline/Roo/Copilot), Cursor, Windsurf, Continue.dev y Aider.
+    * Colectores especializados: `ClaudeCodeCollector`, `ContinueCollector`, `AiderCollector`, `CursorWindsurfCollector`, `VSCodeAICollector`, `OllamaCollector`.
+    * Integración centralizada en `SyncManager.sync_all()`.
+  * **Interfaz Web Mejorada (Dashboard 1.2):**
+    * **Barra Hub "Entornos e IDEs Detectados":** Monitoreo en vivo de los 9 entornos con estado de conexión, insignias de colores y filtro instantáneo.
+    * **Modal de Tarifas con Pestañas por Proveedor:** Filtrado interactivo por proveedor de IA (Google, Anthropic, OpenAI, DeepSeek, Meta, Mistral, Qwen, Ollama, Gratuitos).
+    * **Soporte de Registro Manual Multi-IDE:** Registro de eventos vinculados a cualquier IDE y modelo.
+
+---
+
+## 7. Arquitectura Multi-IDE y Colectores Disponibles
+
+| Entorno / IDE | Proveedor / Tipo | Ruta Auditada | Colector |
+| :--- | :--- | :--- | :--- |
+| **Antigravity IDE** | Google DeepMind | `~/.gemini/antigravity-ide/brain/` | `antigravity_collector.py` |
+| **OpenCode Desktop** | OpenCode AI | `~/.local/share/opencode/opencode.db` | `opencode_collector.py` |
+| **Claude Code** | Anthropic | `~/.claude/` y `.claude.json` | `claude_collector.py` |
+| **Ollama Local AI** | Offline Runtime | `~/.ollama/models/` | `ollama_collector.py` |
+| **VS Code (Cline / Roo)** | Extensión VS Code | `AppData/Roaming/Code/User/globalStorage/` | `vscode_collector.py` |
+| **Cursor AI** | Anysphere | `AppData/Roaming/Cursor/User/workspaceStorage/` | `cursor_collector.py` |
+| **Windsurf Editor** | Codeium | `AppData/Roaming/Windsurf/User/workspaceStorage/` | `cursor_collector.py` |
+| **Continue.dev** | Open Source | `~/.continue/sessions/` | `continue_collector.py` |
+| **Aider Pair** | CLI Pair Tool | `.aider.chat.history.md` en proyectos | `aider_collector.py` |
+
+---
+
+## 8. Verificación y Pruebas del Sistema
+Para validar que todos los colectores, la base de datos y el servidor web funcionan perfectamente:
+```powershell
+python check_health.py
+```
+Salida esperada: `5/5 verificaciones superadas con éxito`, reportando estado 100% operativo.

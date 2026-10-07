@@ -2,81 +2,247 @@
   "models": {
     "gemini-2.5-pro": {
       "name": "Gemini 2.5 Pro",
+      "provider": "Google Gemini",
       "input_per_million": 1.25,
       "output_per_million": 5.00
     },
     "gemini-3.8-flash": {
       "name": "Gemini 3.8 Flash",
+      "provider": "Google Gemini",
       "input_per_million": 0.15,
       "output_per_million": 0.60
     },
     "gemini-2.0-flash": {
       "name": "Gemini 2.0 Flash",
+      "provider": "Google Gemini",
       "input_per_million": 0.10,
       "output_per_million": 0.40
     },
+    "gemini-2.0-flash-thinking": {
+      "name": "Gemini 2.0 Flash Thinking",
+      "provider": "Google Gemini",
+      "input_per_million": 0.10,
+      "output_per_million": 0.40
+    },
+    "gemini-1.5-pro": {
+      "name": "Gemini 1.5 Pro",
+      "provider": "Google Gemini",
+      "input_per_million": 1.25,
+      "output_per_million": 5.00
+    },
+    "gemini-1.5-flash": {
+      "name": "Gemini 1.5 Flash",
+      "provider": "Google Gemini",
+      "input_per_million": 0.075,
+      "output_per_million": 0.30
+    },
     "gemini-flash": {
       "name": "Gemini Flash (Default)",
+      "provider": "Google Gemini",
       "input_per_million": 0.15,
       "output_per_million": 0.60
     },
-    "claude-3-5-sonnet": {
-      "name": "Claude 3.5 Sonnet",
+    "claude-3-7-sonnet": {
+      "name": "Claude 3.7 Sonnet (Hybrid)",
+      "provider": "Anthropic Claude",
       "input_per_million": 3.00,
       "output_per_million": 15.00
     },
-    "claude-3-7-sonnet": {
-      "name": "Claude 3.7 Sonnet",
+    "claude-3-5-sonnet": {
+      "name": "Claude 3.5 Sonnet",
+      "provider": "Anthropic Claude",
       "input_per_million": 3.00,
       "output_per_million": 15.00
     },
     "claude-3-5-haiku": {
       "name": "Claude 3.5 Haiku",
+      "provider": "Anthropic Claude",
       "input_per_million": 0.80,
       "output_per_million": 4.00
     },
+    "claude-3-opus": {
+      "name": "Claude 3 Opus",
+      "provider": "Anthropic Claude",
+      "input_per_million": 15.00,
+      "output_per_million": 75.00
+    },
+    "claude-3-sonnet": {
+      "name": "Claude 3 Sonnet",
+      "provider": "Anthropic Claude",
+      "input_per_million": 3.00,
+      "output_per_million": 15.00
+    },
+    "o1": {
+      "name": "OpenAI o1",
+      "provider": "OpenAI",
+      "input_per_million": 15.00,
+      "output_per_million": 60.00
+    },
+    "o3-mini": {
+      "name": "OpenAI o3-mini",
+      "provider": "OpenAI",
+      "input_per_million": 1.10,
+      "output_per_million": 4.40
+    },
     "gpt-4o": {
       "name": "GPT-4o",
+      "provider": "OpenAI",
       "input_per_million": 2.50,
       "output_per_million": 10.00
     },
     "gpt-4o-mini": {
       "name": "GPT-4o Mini",
+      "provider": "OpenAI",
       "input_per_million": 0.15,
       "output_per_million": 0.60
     },
+    "gpt-4-turbo": {
+      "name": "GPT-4 Turbo",
+      "provider": "OpenAI",
+      "input_per_million": 10.00,
+      "output_per_million": 30.00
+    },
+    "gpt-3.5-turbo": {
+      "name": "GPT-3.5 Turbo",
+      "provider": "OpenAI",
+      "input_per_million": 0.50,
+      "output_per_million": 1.50
+    },
     "deepseek-chat": {
       "name": "DeepSeek V3",
+      "provider": "DeepSeek",
       "input_per_million": 0.14,
       "output_per_million": 0.28
     },
     "deepseek-reasoner": {
       "name": "DeepSeek R1",
+      "provider": "DeepSeek",
       "input_per_million": 0.55,
       "output_per_million": 2.19
     },
-    "deepseek-v4-flash-free": {
-      "name": "DeepSeek V4 Flash (Free)",
+    "deepseek-coder": {
+      "name": "DeepSeek Coder V2",
+      "provider": "DeepSeek",
+      "input_per_million": 0.14,
+      "output_per_million": 0.28
+    },
+    "llama-3.3-70b": {
+      "name": "Llama 3.3 70B",
+      "provider": "Meta Llama",
+      "input_per_million": 0.59,
+      "output_per_million": 0.79
+    },
+    "llama-3.1-405b": {
+      "name": "Llama 3.1 405B",
+      "provider": "Meta Llama",
+      "input_per_million": 2.00,
+      "output_per_million": 2.00
+    },
+    "llama-3.1-70b": {
+      "name": "Llama 3.1 70B",
+      "provider": "Meta Llama",
+      "input_per_million": 0.55,
+      "output_per_million": 0.75
+    },
+    "llama-3.1-8b": {
+      "name": "Llama 3.1 8B",
+      "provider": "Meta Llama",
+      "input_per_million": 0.05,
+      "output_per_million": 0.08
+    },
+    "codestral": {
+      "name": "Codestral 2501",
+      "provider": "Mistral AI",
+      "input_per_million": 0.30,
+      "output_per_million": 0.90
+    },
+    "mistral-large": {
+      "name": "Mistral Large 2",
+      "provider": "Mistral AI",
+      "input_per_million": 2.00,
+      "output_per_million": 6.00
+    },
+    "mistral-small": {
+      "name": "Mistral Small",
+      "provider": "Mistral AI",
+      "input_per_million": 0.20,
+      "output_per_million": 0.60
+    },
+    "qwen-2.5-coder-32b": {
+      "name": "Qwen 2.5 Coder 32B",
+      "provider": "Alibaba Qwen",
+      "input_per_million": 0.20,
+      "output_per_million": 0.60
+    },
+    "qwen-2.5-coder-7b": {
+      "name": "Qwen 2.5 Coder 7B",
+      "provider": "Alibaba Qwen",
+      "input_per_million": 0.08,
+      "output_per_million": 0.24
+    },
+    "qwen-2.5-72b": {
+      "name": "Qwen 2.5 72B",
+      "provider": "Alibaba Qwen",
+      "input_per_million": 0.40,
+      "output_per_million": 1.20
+    },
+    "ollama-local": {
+      "name": "Ollama / Modelo Local",
+      "provider": "Ollama / Local",
       "input_per_million": 0.00,
       "output_per_million": 0.00
     },
-    "big-pickle": {
-      "name": "Big Pickle",
+    "ollama-deepseek-r1": {
+      "name": "Ollama DeepSeek R1 (Local)",
+      "provider": "Ollama / Local",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "ollama-qwen-coder": {
+      "name": "Ollama Qwen Coder (Local)",
+      "provider": "Ollama / Local",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "ollama-llama3": {
+      "name": "Ollama Llama 3 (Local)",
+      "provider": "Ollama / Local",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "deepseek-v4-flash-free": {
+      "name": "DeepSeek V4 Flash (Free)",
+      "provider": "Modelos Gratuitos",
       "input_per_million": 0.00,
       "output_per_million": 0.00
     },
     "nemotron-3-ultra-free": {
       "name": "Nemotron 3 Ultra (Free)",
+      "provider": "Modelos Gratuitos",
       "input_per_million": 0.00,
       "output_per_million": 0.00
     },
     "mimo-v2.5-free": {
       "name": "Mimo V2.5 (Free)",
+      "provider": "Modelos Gratuitos",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "big-pickle": {
+      "name": "Big Pickle (Free)",
+      "provider": "Modelos Gratuitos",
+      "input_per_million": 0.00,
+      "output_per_million": 0.00
+    },
+    "gemini-free": {
+      "name": "Gemini Free Tier",
+      "provider": "Modelos Gratuitos",
       "input_per_million": 0.00,
       "output_per_million": 0.00
     },
     "default": {
       "name": "Modelo Estándar / Fallback",
+      "provider": "General",
       "input_per_million": 0.50,
       "output_per_million": 2.00
     }

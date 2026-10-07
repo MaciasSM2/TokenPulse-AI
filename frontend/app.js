@@ -1,4 +1,4 @@
-// TokenPulse AI - Project-Centric & Global Logic
+// TokenPulse AI - Multi-IDE & Multi-Model Project-Centric Logic
 
 let currentViewMode = 'global'; // 'global' | 'project'
 let currentSelectedProject = null;
@@ -6,6 +6,8 @@ let currentIdeFilter = 'all';
 let searchQuery = '';
 let searchDebounceTimer = null;
 let allProjectsList = [];
+let cachedPricingModels = {};
+let currentPricingProvider = 'all';
 
 // DOM Elements: Views
 const globalViewContainer = document.getElementById('globalViewContainer');
@@ -14,6 +16,7 @@ const tabGlobalView = document.getElementById('tabGlobalView');
 const tabProjectView = document.getElementById('tabProjectView');
 const projectSelect = document.getElementById('projectSelect');
 const btnBackToGlobal = document.getElementById('btnBackToGlobal');
+const ideHubContainer = document.getElementById('ideHubContainer');
 
 // DOM Elements: Global KPIs
 const kpiTotalCost = document.getElementById('kpiTotalCost');
@@ -71,6 +74,7 @@ const btnLogCommandModal = document.getElementById('btnLogCommandModal');
 const btnCloseLogModal = document.getElementById('btnCloseLogModal');
 const btnCancelLog = document.getElementById('btnCancelLog');
 const btnSubmitLog = document.getElementById('btnSubmitLog');
+const eventIdeSelect = document.getElementById('eventIde');
 const eventDescInput = document.getElementById('eventDesc');
 const eventCmdInput = document.getElementById('eventCmd');
 const eventModelSelect = document.getElementById('eventModel');
@@ -81,6 +85,30 @@ const btnPricingModal = document.getElementById('btnPricingModal');
 const btnClosePricingModal = document.getElementById('btnClosePricingModal');
 const btnClosePricingDone = document.getElementById('btnClosePricingDone');
 const pricingTableBody = document.getElementById('pricingTableBody');
+const providerFilterTabs = document.getElementById('providerFilterTabs');
+
+// Helpers for IDE Info
+const IDE_REGISTRY = {
+  antigravity: { name: 'Antigravity IDE', badgeClass: 'badge-antigravity', color: '#38bdf8' },
+  opencode: { name: 'OpenCode Desktop', badgeClass: 'badge-opencode', color: '#c084fc' },
+  claude: { name: 'Claude Code', badgeClass: 'badge-claude', color: '#fbbf24' },
+  cursor: { name: 'Cursor AI', badgeClass: 'badge-cursor', color: '#00f0ff' },
+  windsurf: { name: 'Windsurf', badgeClass: 'badge-windsurf', color: '#22d3ee' },
+  vscode: { name: 'VS Code AI', badgeClass: 'badge-vscode', color: '#60a5fa' },
+  ollama: { name: 'Ollama Local', badgeClass: 'badge-ollama', color: '#34d399' },
+  continue: { name: 'Continue.dev', badgeClass: 'badge-continue', color: '#f472b6' },
+  aider: { name: 'Aider Pair', badgeClass: 'badge-aider', color: '#a3e635' }
+};
+
+function getIdeInfo(ideKey) {
+  if (!ideKey) return { name: 'General', badgeClass: 'badge-ide', color: '#94a3b8' };
+  const key = ideKey.toLowerCase();
+  return IDE_REGISTRY[key] || {
+    name: ideKey.charAt(0).toUpperCase() + ideKey.slice(1),
+    badgeClass: 'badge-ide',
+    color: '#38bdf8'
+  };
+}
 
 // Formatters
 function formatNumber(num) {
@@ -133,6 +161,7 @@ function switchViewMode(mode, projectName = null) {
     currentSelectedProject = null;
     projectSelect.value = '';
     loadStats();
+    loadIdesHub();
     loadSessions();
   } else {
     tabProjectView.classList.add('active');
@@ -159,6 +188,66 @@ async function loadStats() {
   } catch (err) {
     console.error('Error fetching stats:', err);
   }
+}
+
+async function loadIdesHub() {
+  if (!ideHubContainer) return;
+  try {
+    const res = await fetch('/api/ides');
+    if (!res.ok) throw new Error('Error al obtener IDEs');
+    const ides = await res.json();
+    renderIdesHub(ides);
+  } catch (err) {
+    console.error('Error fetching IDEs:', err);
+  }
+}
+
+function renderIdesHub(ides) {
+  if (!ideHubContainer) return;
+  ideHubContainer.innerHTML = ides.map(ide => {
+    const isActive = ide.status === 'active';
+    const isDetected = ide.detected;
+    const dotClass = isActive ? 'active' : (isDetected ? 'detected' : 'inactive');
+
+    let statText = 'No detectado';
+    if (isActive && ide.tokens_count > 0) {
+      statText = `${formatNumber(ide.tokens_count)} tokens • ${formatUSD(ide.cost_usd)}`;
+    } else if (isDetected) {
+      statText = 'Detectado en Disco';
+    }
+
+    return `
+      <div class="ide-hub-card" data-ide-id="${escapeHtml(ide.id)}" title="${escapeHtml(ide.description || ide.name)} - Haz clic para filtrar">
+        <div class="ide-hub-info">
+          <span class="ide-hub-dot ${dotClass}"></span>
+          <div>
+            <div class="ide-hub-title">${escapeHtml(ide.name)}</div>
+            <div class="ide-hub-vendor">${escapeHtml(ide.vendor)}</div>
+          </div>
+        </div>
+        <div class="ide-hub-stats">
+          <span class="badge-ide ${ide.badge_class || 'badge-ide'}" style="font-size: 10px; padding: 2px 6px;">
+            ${isActive ? 'Activo' : (isDetected ? 'Detectado' : 'Pendiente')}
+          </span>
+          <div style="color: var(--text-dim); margin-top: 3px; font-size: 10px;">${statText}</div>
+        </div>
+      </div>
+    `;
+  }).join('');
+
+  // Add click handlers on IDE cards to filter sessions
+  document.querySelectorAll('.ide-hub-card').forEach(card => {
+    card.addEventListener('click', () => {
+      const ideId = card.dataset.ideId;
+      if (ideId) {
+        document.querySelectorAll('.filter-tab').forEach(t => {
+          t.classList.toggle('active', t.dataset.ide === ideId);
+        });
+        currentIdeFilter = ideId;
+        loadSessions();
+      }
+    });
+  });
 }
 
 async function loadProjectsList() {
@@ -209,7 +298,6 @@ function renderProjectDetail(detail) {
   const models = detail.models || [];
   const timeline = detail.timeline || [];
   const sessions = detail.sessions || [];
-  const events = detail.events || [];
 
   // Hero Card
   projHeroName.textContent = sm.project_name || 'Proyecto';
@@ -279,13 +367,10 @@ function renderProjectDetail(detail) {
     projSessionsTableBody.innerHTML = `<tr><td colspan="8" class="loading-cell">Sin sesiones registradas.</td></tr>`;
   } else {
     projSessionsTableBody.innerHTML = sessions.map(s => {
-      const isAntigravity = s.source_ide === 'antigravity';
-      const ideBadge = isAntigravity ? 'badge-antigravity' : 'badge-opencode';
-      const ideText = isAntigravity ? 'Antigravity' : 'OpenCode';
-
+      const ideInfo = getIdeInfo(s.source_ide);
       return `
         <tr>
-          <td><span class="badge-ide ${ideBadge}">${ideText}</span></td>
+          <td><span class="badge-ide ${ideInfo.badgeClass}">${escapeHtml(ideInfo.name)}</span></td>
           <td>
             <div class="cell-project">${escapeHtml(s.title || 'Sesión de Trabajo')}</div>
           </td>
@@ -354,18 +439,16 @@ function renderStats(data) {
   kpiReasonTokens.textContent = formatNumber(overall.total_reasoning_tokens);
   kpiTotalSessions.textContent = formatNumber(overall.total_sessions);
 
-  let agCost = 0, agSessions = 0, agTokens = 0;
-  let ocCost = 0, ocSessions = 0, ocTokens = 0;
+  let agCost = 0, agSessions = 0;
+  let ocCost = 0, ocSessions = 0;
 
   byIde.forEach(item => {
     if (item.source_ide === 'antigravity') {
       agCost = item.cost_usd || 0;
       agSessions = item.sessions || 0;
-      agTokens = item.tokens || 0;
     } else if (item.source_ide === 'opencode') {
       ocCost = item.cost_usd || 0;
       ocSessions = item.sessions || 0;
-      ocTokens = item.tokens || 0;
     }
   });
 
@@ -378,35 +461,33 @@ function renderStats(data) {
     lastSyncTime.textContent = data.last_sync.timestamp.split(' ')[1] || data.last_sync.timestamp;
   }
 
+  // Multi-IDE Comparison Bars
   const totalTokens = (overall.total_tokens || 1);
-  const agPercent = Math.round((agTokens / totalTokens) * 100);
-  const ocPercent = Math.round((ocTokens / totalTokens) * 100);
+  if (byIde.length === 0) {
+    ideCompareContainer.innerHTML = `<p class="panel-hint">Sin datos de IDEs.</p>`;
+  } else {
+    ideCompareContainer.innerHTML = byIde.map(item => {
+      const info = getIdeInfo(item.source_ide);
+      const pct = Math.round((item.tokens / totalTokens) * 100);
+      return `
+        <div class="ide-stat-item">
+          <div class="ide-stat-header">
+            <span class="ide-badge-label"><span class="badge-ide ${info.badgeClass}">${escapeHtml(info.name)}</span></span>
+            <span class="mono-num">${formatNumber(item.tokens)} tokens (${pct}%) • ${formatUSD(item.cost_usd)}</span>
+          </div>
+          <div class="progress-track">
+            <div class="progress-fill" style="width: ${pct}%; background: ${info.color};"></div>
+          </div>
+        </div>
+      `;
+    }).join('');
+  }
 
-  ideCompareContainer.innerHTML = `
-    <div class="ide-stat-item">
-      <div class="ide-stat-header">
-        <span class="ide-badge-label"><span class="badge-ide badge-antigravity">Antigravity</span></span>
-        <span class="mono-num">${formatNumber(agTokens)} tokens (${agPercent}%) • ${formatUSD(agCost)}</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill fill-antigravity" style="width: ${agPercent}%;"></div>
-      </div>
-    </div>
-    <div class="ide-stat-item">
-      <div class="ide-stat-header">
-        <span class="ide-badge-label"><span class="badge-ide badge-opencode">OpenCode</span></span>
-        <span class="mono-num">${formatNumber(ocTokens)} tokens (${ocPercent}%) • ${formatUSD(ocCost)}</span>
-      </div>
-      <div class="progress-track">
-        <div class="progress-fill fill-opencode" style="width: ${ocPercent}%;"></div>
-      </div>
-    </div>
-  `;
-
+  // Top Models
   if (byModel.length === 0) {
     modelsContainer.innerHTML = `<p class="panel-hint">Sin datos de modelos.</p>`;
   } else {
-    modelsContainer.innerHTML = byModel.slice(0, 5).map(m => `
+    modelsContainer.innerHTML = byModel.slice(0, 6).map(m => `
       <div class="model-row">
         <span class="model-name" title="${m.model_name}">
           <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
@@ -419,6 +500,7 @@ function renderStats(data) {
     `).join('');
   }
 
+  // Timeline
   if (timeline.length === 0) {
     timelineChartWrapper.innerHTML = `<p class="panel-hint" style="margin: auto;">No hay suficiente historial para graficar.</p>`;
   } else {
@@ -443,13 +525,11 @@ function renderSessions(sessions) {
   }
 
   sessionsTableBody.innerHTML = sessions.map(s => {
-    const isAntigravity = s.source_ide === 'antigravity';
-    const ideBadgeClass = isAntigravity ? 'badge-antigravity' : 'badge-opencode';
-    const ideName = isAntigravity ? 'Antigravity' : 'OpenCode';
+    const ideInfo = getIdeInfo(s.source_ide);
 
     return `
       <tr>
-        <td><span class="badge-ide ${ideBadgeClass}">${ideName}</span></td>
+        <td><span class="badge-ide ${ideInfo.badgeClass}">${escapeHtml(ideInfo.name)}</span></td>
         <td>
           <div class="cell-project">${escapeHtml(s.project_name || 'General')}</div>
           <div class="cell-title">${escapeHtml(s.title || '')}</div>
@@ -485,7 +565,7 @@ btnSync.addEventListener('click', async () => {
   syncStatusText.textContent = 'Sincronizando...';
   try {
     const res = await fetch('/api/sync', { method: 'POST' });
-    await Promise.all([loadStats(), loadProjectsList(), loadSessions()]);
+    await Promise.all([loadStats(), loadIdesHub(), loadProjectsList(), loadSessions()]);
     if (currentViewMode === 'project' && currentSelectedProject) {
       loadProjectDetail(currentSelectedProject);
     }
@@ -565,6 +645,7 @@ btnSubmitLog.addEventListener('click', async () => {
   const desc = eventDescInput.value.trim();
   const cmd = eventCmdInput.value.trim();
   const model = eventModelSelect.value;
+  const ide = eventIdeSelect ? eventIdeSelect.value : 'antigravity';
   const tokens = parseInt(eventTokensInput.value, 10) || 0;
 
   if (!desc && !cmd) {
@@ -576,7 +657,7 @@ btnSubmitLog.addEventListener('click', async () => {
     const res = await fetch(`/api/projects/${encodeURIComponent(currentSelectedProject)}/event`, {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ description: desc, command: cmd, model: model, tokens: tokens })
+      body: JSON.stringify({ description: desc, command: cmd, model: model, ide: ide, tokens: tokens })
     });
     if (!res.ok) throw new Error('Error al registrar evento');
     logEventModal.classList.remove('open');
@@ -588,7 +669,7 @@ btnSubmitLog.addEventListener('click', async () => {
   }
 });
 
-// Modal: Pricing
+// Modal: Pricing & Provider Filtering
 btnPricingModal.addEventListener('click', () => {
   pricingModal.classList.add('open');
   loadPricing();
@@ -599,20 +680,63 @@ btnClosePricingDone.addEventListener('click', () => pricingModal.classList.remov
 async function loadPricing() {
   try {
     const res = await fetch('/api/pricing');
-    const models = await res.json();
-    pricingTableBody.innerHTML = Object.keys(models).map(key => {
-      const m = models[key];
-      return `
-        <tr>
-          <td><strong>${escapeHtml(m.name || key)}</strong></td>
-          <td class="mono-num">$${m.input_per_million.toFixed(2)}</td>
-          <td class="mono-num">$${m.output_per_million.toFixed(2)}</td>
-        </tr>
-      `;
-    }).join('');
+    cachedPricingModels = await res.json();
+    renderPricingTable();
+    updateEventModelSelect();
   } catch (err) {
     console.error('Error fetching pricing:', err);
   }
+}
+
+function renderPricingTable() {
+  const keys = Object.keys(cachedPricingModels);
+  const filteredKeys = keys.filter(key => {
+    if (currentPricingProvider === 'all') return true;
+    const provider = cachedPricingModels[key].provider || 'General';
+    return provider === currentPricingProvider;
+  });
+
+  if (filteredKeys.length === 0) {
+    pricingTableBody.innerHTML = `<tr><td colspan="4" class="loading-cell">Sin modelos para este proveedor.</td></tr>`;
+    return;
+  }
+
+  pricingTableBody.innerHTML = filteredKeys.map(key => {
+    const m = cachedPricingModels[key];
+    const prov = m.provider || 'General';
+    return `
+      <tr>
+        <td><span class="mono-num" style="font-size: 11px; color: var(--text-dim);">${escapeHtml(prov)}</span></td>
+        <td><strong>${escapeHtml(m.name || key)}</strong></td>
+        <td class="mono-num">$${m.input_per_million.toFixed(2)}</td>
+        <td class="mono-num">$${m.output_per_million.toFixed(2)}</td>
+      </tr>
+    `;
+  }).join('');
+}
+
+function updateEventModelSelect() {
+  if (!eventModelSelect || Object.keys(cachedPricingModels).length === 0) return;
+  const currentVal = eventModelSelect.value;
+  eventModelSelect.innerHTML = Object.keys(cachedPricingModels).map(key => {
+    const m = cachedPricingModels[key];
+    return `<option value="${escapeHtml(key)}">${escapeHtml(m.name || key)} ($${m.input_per_million.toFixed(2)} / $${m.output_per_million.toFixed(2)})</option>`;
+  }).join('');
+  if (currentVal && cachedPricingModels[currentVal]) {
+    eventModelSelect.value = currentVal;
+  }
+}
+
+// Provider Filter Tabs Click Listeners
+if (providerFilterTabs) {
+  providerFilterTabs.querySelectorAll('.provider-tab').forEach(tab => {
+    tab.addEventListener('click', () => {
+      providerFilterTabs.querySelectorAll('.provider-tab').forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentPricingProvider = tab.dataset.provider;
+      renderPricingTable();
+    });
+  });
 }
 
 // Scan Projects Button
@@ -628,7 +752,7 @@ if (btnScanProjects) {
       });
       const data = await res.json();
       alert(`¡Escaneo Completado! Se detectaron y vincularon ${data.count} proyectos.`);
-      await Promise.all([loadStats(), loadProjectsList(), loadSessions()]);
+      await Promise.all([loadStats(), loadIdesHub(), loadProjectsList(), loadSessions()]);
     } catch (err) {
       alert('Error durante el escaneo: ' + err.message);
     } finally {
@@ -648,7 +772,7 @@ if (btnExportProject) {
 
 // Initial Boot
 async function initApp() {
-  await Promise.all([loadStats(), loadProjectsList(), loadSessions()]);
+  await Promise.all([loadStats(), loadIdesHub(), loadProjectsList(), loadSessions(), loadPricing()]);
 
   // Check URL query param ?project=...
   const urlParams = new URLSearchParams(window.location.search);
@@ -664,6 +788,7 @@ initApp();
 setInterval(() => {
   if (currentViewMode === 'global') {
     loadStats();
+    loadIdesHub();
   } else if (currentSelectedProject) {
     loadProjectDetail(currentSelectedProject);
   }

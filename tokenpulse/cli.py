@@ -218,7 +218,7 @@ def status_project(target_dir: str = "."):
     print("=" * 65)
     return 0
 
-def log_event(target_dir: str = ".", description: str = "", command: str = "", model: str = "", tokens: int = 0):
+def log_event(target_dir: str = ".", description: str = "", command: str = "", model: str = "", tokens: int = 0, ide: str = "antigravity"):
     proj_path = Path(target_dir).resolve()
     canonical_name = clean_project_name(None, str(proj_path))
 
@@ -242,6 +242,7 @@ def log_event(target_dir: str = ".", description: str = "", command: str = "", m
         "model_name": friendly_model,
         "tokens_used": tokens,
         "cost_usd": cost_usd,
+        "source_ide": ide,
         "timestamp": datetime.now(timezone.utc).isoformat()
     }
 
@@ -260,10 +261,11 @@ def log_event(target_dir: str = ".", description: str = "", command: str = "", m
         command_text=command,
         model_name=friendly_model,
         tokens_used=tokens,
-        cost_usd=cost_usd
+        cost_usd=cost_usd,
+        metadata=json.dumps({"source_ide": ide})
     )
 
-    print(f"✓ Evento registrado en '{canonical_name}': {description or command} ({tokens} tokens, ${cost_usd:.4f} USD)")
+    print(f"✓ Evento registrado en '{canonical_name}' [{ide}]: {description or command} ({tokens} tokens, ${cost_usd:.4f} USD)")
     return 0
 
 def export_project_markdown(project_name: str) -> str:
@@ -337,6 +339,7 @@ def main():
     log_parser.add_argument("--path", default=".", help="Ruta del proyecto")
     log_parser.add_argument("--cmd", default="", help="Comando ejecutado")
     log_parser.add_argument("--model", default="default", help="Modelo de IA utilizado")
+    log_parser.add_argument("--ide", default="antigravity", help="Entorno o IDE (antigravity, opencode, claude, cursor, windsurf, vscode, ollama)")
     log_parser.add_argument("--tokens", type=int, default=0, help="Tokens consumidos en el proceso")
 
     # export
@@ -354,7 +357,7 @@ def main():
     elif args.action == "status":
         return status_project(args.path)
     elif args.action == "log":
-        return log_event(args.path, description=args.description, command=args.cmd, model=args.model, tokens=args.tokens)
+        return log_event(args.path, description=args.description, command=args.cmd, model=args.model, tokens=args.tokens, ide=args.ide)
     elif args.action == "export":
         md = export_project_markdown(args.project)
         if args.out:

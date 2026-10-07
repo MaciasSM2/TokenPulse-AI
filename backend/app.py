@@ -1,14 +1,15 @@
 from contextlib import asynccontextmanager
-from typing import Optional, Dict, Any
+from typing import Optional, Dict, Any, List
 from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, PlainTextResponse
 
 from backend.database import Database
 from backend.pricing import PricingEngine
 from backend.sync_manager import SyncManager
+from backend.ide_detector import IDEDetector
 from backend.config import BASE_DIR, PRICING_FILE_PATH
 
 db = Database()
@@ -23,9 +24,9 @@ async def lifespan(app: FastAPI):
     sync_manager.stop()
 
 app = FastAPI(
-    title="TokenPulse AI | Contador de Tokens & Costes por Proyecto",
-    description="Monitor unificado de consumo y costes de tokens para Antigravity IDE y OpenCode Desktop con desglose por proyecto y por modelo de IA",
-    version="1.1.0",
+    title="TokenPulse AI | Contador de Tokens & Costes Multi-IDE",
+    description="Monitor unificado de consumo y costes de tokens para múltiples IDEs (Antigravity, OpenCode, Claude Code, Cursor, Windsurf, VS Code, Ollama, Continue, Aider) y modelos de IA",
+    version="1.2.0",
     lifespan=lifespan
 )
 
@@ -48,6 +49,23 @@ def get_stats():
         "status": "idle"
     }
     return stats
+
+@app.get("/api/ides")
+def get_ides_status():
+    """Retorna lista de todos los IDEs soportados con su estado de detección y consumo acumulado."""
+    ides = IDEDetector.get_known_ides()
+    stats = db.get_summary_stats()
+    by_ide_map = {item["source_ide"].lower(): item for item in stats.get("by_ide", [])}
+
+    for ide in ides:
+        ide_stat = by_ide_map.get(ide["id"], {})
+        ide["session_count"] = ide_stat.get("sessions", 0)
+        ide["tokens_count"] = ide_stat.get("tokens", 0)
+        ide["cost_usd"] = ide_stat.get("cost_usd", 0.0)
+        if ide["session_count"] > 0:
+            ide["status"] = "active"
+            ide["status_label"] = "Activo y Auditado"
+    return ides
 
 @app.get("/api/projects")
 def get_projects():
@@ -79,6 +97,7 @@ def api_log_project_event(project_name: str, payload: Dict[str, Any] = Body(...)
     desc = payload.get("description", "Actualización")
     cmd = payload.get("command", "")
     model = payload.get("model", "default")
+    ide = payload.get("ide", "antigravity")
     tokens = int(payload.get("tokens", 0))
 
     cost_usd, friendly_model = pricing.calculate_cost(model, tokens, 0) if tokens > 0 else (0.0, model)
@@ -89,7 +108,8 @@ def api_log_project_event(project_name: str, payload: Dict[str, Any] = Body(...)
         command_text=cmd,
         model_name=friendly_model,
         tokens_used=tokens,
-        cost_usd=cost_usd
+        cost_usd=cost_usd,
+        metadata=f'{{"source_ide": "{ide}"}}'
     )
     return {"status": "success", "cost_usd": cost_usd}
 
@@ -105,7 +125,6 @@ def api_scan_projects(payload: Dict[str, Any] = Body(default={})):
 def api_export_project(project_name: str):
     """Genera y descarga un reporte Markdown completo del proyecto."""
     from tokenpulse.cli import export_project_markdown
-    from fastapi.responses import PlainTextResponse
     md = export_project_markdown(project_name)
     return PlainTextResponse(content=md, media_type="text/markdown")
 
@@ -121,7 +140,7 @@ def get_sessions(
 
 @app.post("/api/sync")
 def trigger_sync():
-    """Fuerza una sincronización manual inmediata de ambos entornos."""
+    """Fuerza una sincronización manual inmediata de todos los entornos e IDEs."""
     result = sync_manager.sync_all()
     return {"status": "success", "result": result}
 
