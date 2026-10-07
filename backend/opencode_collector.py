@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Dict, Any, List
 
 from backend.config import OPENCODE_DB_PATH
-from backend.database import Database
+from backend.database import Database, clean_project_name
 from backend.pricing import PricingEngine
 
 class OpenCodeCollector:
@@ -49,7 +49,7 @@ class OpenCodeCollector:
         for row in sessions:
             s_id = row["id"]
             directory = row["directory"] or ""
-            project_name = Path(directory).name if directory else "OpenCode Workspace"
+            project_name = clean_project_name(None, directory)
             title = row["title"] or f"Sesión {s_id[:8]}"
             raw_model = row["model"] or "default"
             

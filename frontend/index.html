@@ -60,6 +60,11 @@
           <span>Vincular Proyecto</span>
         </button>
 
+        <button id="btnOpenVisibility" class="btn btn-secondary btn-sm" title="Ajustes de visibilidad: Ocultar entornos o herramientas no utilizadas">
+          <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 0 1 0 2.83 2 2 0 0 1-2.83 0l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-2 2 2 2 0 0 1-2-2v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 0 1-2.83 0 2 2 0 0 1 0-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1-2-2 2 2 0 0 1 2-2h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 0 1 0-2.83 2 2 0 0 1 2.83 0l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 2-2 2 2 0 0 1 2 2v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 0 1 2.83 0 2 2 0 0 1 0 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 2 2 2 2 0 0 1-2 2h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+          <span>⚙️ Visibilidad</span>
+        </button>
+
         <div class="sync-status-badge" id="syncStatus">
           <span class="status-dot"></span>
           <span id="syncStatusText">Sincronizado</span>
@@ -92,6 +97,9 @@
             <h3 style="font-size: 16px;">Entornos e IDEs Detectados</h3>
             <span class="panel-hint">Detección y auditoría de IDEs de programación asistida por IA en este equipo</span>
           </div>
+          <button id="btnQuickVisibility" class="btn btn-secondary btn-sm" style="font-size: 11px; padding: 4px 10px;" title="Personalizar qué entornos mostrar">
+            <span>⚙️ Personalizar Visibilidad</span>
+          </button>
         </div>
         <div class="ide-hub-container" id="ideHubContainer">
           <!-- Populated dynamically via /api/ides -->
@@ -251,9 +259,16 @@
 
         <!-- Chart 3: Top Projects -->
         <div class="glass-panel chart-panel">
-          <div class="panel-header">
-            <h3>Proyectos Registrados</h3>
-            <span class="panel-hint">Haz clic en cualquiera para auditarlo</span>
+          <div class="panel-header" style="flex-wrap: wrap; gap: 8px;">
+            <div>
+              <h3>Proyectos Registrados</h3>
+              <span class="panel-hint">Haz clic para auditar • ⭐ Fija tus favoritos</span>
+            </div>
+            <div class="proj-filter-pills" id="projFilterTabs">
+              <button class="proj-pill-tab active" data-tab="all">📁 Todos</button>
+              <button class="proj-pill-tab" data-tab="fav">⭐ Favoritos</button>
+              <button class="proj-pill-tab" data-tab="hidden">👁️ Ocultos</button>
+            </div>
           </div>
           <div class="projects-list" id="projectsContainer"></div>
         </div>
@@ -512,29 +527,133 @@
 
   <!-- Modal: Link / Init Project -->
   <div class="modal-overlay" id="linkProjectModal">
-    <div class="modal-content glass-panel">
+    <div class="modal-content glass-panel" style="max-width: 680px;">
       <div class="modal-header">
         <h3>Vincular Carpeta de Proyecto</h3>
         <button class="btn-close" id="btnCloseLinkModal">&times;</button>
       </div>
       <div class="modal-body">
-        <p class="modal-desc">Ingresa la ruta de la carpeta del proyecto para vincularlo con el paquete TokenPulse y auditar su consumo:</p>
+        <p class="modal-desc">Selecciona o ingresa la ruta de la carpeta para verificar que sea un proyecto válido de programación y auditar su consumo:</p>
+        
         <div class="form-group">
           <label for="linkPath">Ruta de la Carpeta del Proyecto:</label>
-          <input type="text" id="linkPath" class="form-input" placeholder="C:\Users\...\Documents\0. Programacion\MiProyecto">
+          <div style="display: flex; gap: 8px;">
+            <input type="text" id="linkPath" class="form-input" style="flex: 1;" placeholder="C:\Users\...\Documents\0. Programacion\MiProyecto">
+            <button class="btn btn-secondary" id="btnOpenFolderBrowser" type="button" title="Examinar y navegar carpetas en disco">
+              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/></svg>
+              <span>Examinar</span>
+            </button>
+          </div>
         </div>
+
+        <!-- Collapsible Folder Browser Box -->
+        <div class="folder-browser-box" id="folderBrowserBox" style="display: none;">
+          <div class="browser-nav-bar">
+            <button class="btn btn-secondary btn-xs" id="btnBrowserUp" type="button" title="Subir a carpeta superior">
+              <svg width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><line x1="12" y1="19" x2="12" y2="5"/><polyline points="5 12 12 5 19 12"/></svg>
+              <span>Subir</span>
+            </button>
+            <span class="browser-current-path" id="browserCurrentPath">C:\...</span>
+          </div>
+          <div class="folder-browser-list" id="browserFolderList">
+            <div class="browser-loading">Explorando carpetas...</div>
+          </div>
+        </div>
+
+        <!-- Live Verification Feedback Box -->
+        <div class="verify-feedback-box" id="verifyFeedbackBox" style="display: none;">
+          <div class="verify-header">
+            <span class="verify-status-badge" id="verifyStatusBadge">✅ Proyecto Válido</span>
+            <span class="verify-project-name" id="verifyProjectName">Nombre</span>
+          </div>
+          <div class="verify-details" id="verifyDetailsText">Detalles del proyecto y tecnologías detectadas.</div>
+        </div>
+
         <div class="form-group">
           <label for="linkName">Nombre del Proyecto (Opcional):</label>
-          <input type="text" id="linkName" class="form-input" placeholder="Nombre identificador">
+          <input type="text" id="linkName" class="form-input" placeholder="Nombre identificador en el dashboard">
         </div>
         <div class="form-group">
           <label for="linkBudget">Presupuesto Límite en USD (Opcional):</label>
           <input type="number" id="linkBudget" class="form-input" placeholder="10.00" step="0.5">
         </div>
+
+        <div style="margin-top: 10px; padding-top: 10px; border-top: 1px solid var(--border-subtle); display: flex; justify-content: space-between; align-items: center;">
+          <span class="panel-hint" style="font-size: 11px;">¿Tienes sesiones de subcarpetas dispersas?</span>
+          <button class="btn btn-outline btn-xs" id="btnConsolidateModal" type="button" title="Agrupa subcarpetas dispersas en sus proyectos raíz correspondientes">
+            <span>🧹 Limpiar y Consolidar Sesiones</span>
+          </button>
+        </div>
       </div>
       <div class="modal-footer">
         <button class="btn btn-secondary" id="btnCancelLink">Cancelar</button>
         <button class="btn btn-primary" id="btnSubmitLink">Vincular Proyecto</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Modal: Visibility & Environment Settings -->
+  <div class="modal-overlay" id="visibilityModal">
+    <div class="modal-content glass-panel" style="max-width: 650px;">
+      <div class="modal-header">
+        <h3>⚙️ Preferencias de Visibilidad y Entornos</h3>
+        <button class="btn-close" id="btnCloseVisibilityModal">&times;</button>
+      </div>
+      <div class="modal-body">
+        <p class="modal-desc">Personaliza qué herramientas, entornos y modelos deseas ver en TokenPulse para mantener tu espacio limpio y enfocado:</p>
+        
+        <!-- Section 1: Inactive IDEs Master Toggle -->
+        <div class="settings-section">
+          <div class="toggle-control-row">
+            <div>
+              <strong style="font-size: 14px; color: var(--text-main);">Ocultar entornos desconectados / sin actividad</strong>
+              <div class="panel-hint" style="font-size: 12px; margin-top: 2px;">
+                Oculta automáticamente del panel superior cualquier IDE que no tenga sesiones registradas o esté desconectado.
+              </div>
+            </div>
+            <label class="switch-toggle">
+              <input type="checkbox" id="toggleHideInactiveIdes" checked>
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+
+        <!-- Section 2: Individual IDE Checkboxes -->
+        <div class="settings-section" style="margin-top: 16px;">
+          <h4 style="font-size: 13px; margin-bottom: 10px; color: var(--text-muted); text-transform: uppercase; letter-spacing: 0.5px;">Entornos de Desarrollo Visibles:</h4>
+          <div class="ide-visibility-grid" id="ideVisibilityGrid">
+            <!-- Populated dynamically via JS -->
+          </div>
+        </div>
+
+        <!-- Section 3: AI Models and Projects Toggles -->
+        <div class="settings-section" style="margin-top: 18px; padding-top: 14px; border-top: 1px solid var(--border-subtle);">
+          <div class="toggle-control-row" style="margin-bottom: 12px;">
+            <div>
+              <strong style="font-size: 13px; color: var(--text-main);">Ocultar modelos de IA no utilizados</strong>
+              <div class="panel-hint" style="font-size: 11px;">Muestra en el catálogo de tarifas únicamente los modelos que registran consumo real.</div>
+            </div>
+            <label class="switch-toggle">
+              <input type="checkbox" id="toggleHideUnusedModels">
+              <span class="slider round"></span>
+            </label>
+          </div>
+
+          <div class="toggle-control-row">
+            <div>
+              <strong style="font-size: 13px; color: var(--text-main);">Mostrar proyectos archivados / ocultos</strong>
+              <div class="panel-hint" style="font-size: 11px;">Permite visualizar en el listado las carpetas o proyectos que marcaste como ocultos.</div>
+            </div>
+            <label class="switch-toggle">
+              <input type="checkbox" id="toggleShowHiddenProjects">
+              <span class="slider round"></span>
+            </label>
+          </div>
+        </div>
+      </div>
+      <div class="modal-footer">
+        <button class="btn btn-secondary" id="btnCancelVisibility">Cancelar</button>
+        <button class="btn btn-primary" id="btnSaveVisibility">Guardar Preferencias</button>
       </div>
     </div>
   </div>

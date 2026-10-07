@@ -70,6 +70,20 @@ CREATE TABLE IF NOT EXISTS sync_state (
 """
 
 def clean_project_name(raw_name: Optional[str], raw_path: Optional[str] = "") -> str:
+    from backend.project_verifier import resolve_canonical_project
+    
+    # 1. If we have a path or raw_name looks like a path or has extensions, try resolving canonical project
+    candidate_path = raw_path or ""
+    if not candidate_path and raw_name and ("/" in raw_name or "\\" in raw_name or "." in raw_name):
+        candidate_path = raw_name
+
+    if candidate_path:
+        canonical_name, _, reason = resolve_canonical_project(candidate_path)
+        if canonical_name and canonical_name not in ["General", "system_root_fallback"]:
+            if not re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', canonical_name, re.IGNORECASE):
+                return canonical_name
+
+    # 2. Check 0. Programacion regex as fast fallback
     path_to_check = raw_path or raw_name or ""
     if path_to_check:
         m = re.search(r'0\.\s*Programacion[\\/]([^\\/]+)', path_to_check, re.IGNORECASE)
@@ -84,7 +98,9 @@ def clean_project_name(raw_name: Optional[str], raw_path: Optional[str] = "") ->
     if re.match(r'^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$', raw, re.IGNORECASE):
         return "General"
     
-    return raw
+    # Remove file extension if raw_name was a file like foo.md
+    cleaned = re.sub(r'\.(md|py|js|ts|json|txt|rpy)$', '', raw, flags=re.IGNORECASE).strip()
+    return cleaned or "General"
 
 class Database:
     def __init__(self, db_path=TRACKER_DB_PATH):
@@ -99,6 +115,21 @@ class Database:
     def init_db(self):
         with self.get_connection() as conn:
             conn.executescript(SCHEMA_SQL)
+            conn.commit()
+
+            # Auto-migrate columns in registered_projects if missing
+            cur = conn.cursor()
+            cur.execute("PRAGMA table_info(registered_projects)")
+            cols = {r["name"] for r in cur.fetchall()}
+            
+            if "is_favorite" not in cols:
+                conn.execute("ALTER TABLE registered_projects ADD COLUMN is_favorite INTEGER DEFAULT 0")
+            if "is_hidden" not in cols:
+                conn.execute("ALTER TABLE registered_projects ADD COLUMN is_hidden INTEGER DEFAULT 0")
+            if "is_verified" not in cols:
+                conn.execute("ALTER TABLE registered_projects ADD COLUMN is_verified INTEGER DEFAULT 1")
+            if "tech_stack" not in cols:
+                conn.execute("ALTER TABLE registered_projects ADD COLUMN tech_stack TEXT DEFAULT ''")
             conn.commit()
 
     def upsert_session(self, record: Dict[str, Any]):
@@ -181,6 +212,94 @@ class Database:
         with self.get_connection() as conn:
             conn.execute(sql, (project_name, event_type, description, command_text, model_name, tokens_used, cost_usd, timestamp, metadata))
             conn.commit()
+
+    def toggle_favorite(self, project_name: str) -> bool:
+        """Alterna el estado de favorito de un proyecto. Retorna el nuevo estado booleano."""
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT is_favorite FROM registered_projects WHERE project_name = ?", (project_name,))
+            row = cur.fetchone()
+            current_fav = row["is_favorite"] if (row and row["is_favorite"] is not None) else 0
+            new_fav = 0 if current_fav == 1 else 1
+            
+            conn.execute("""
+                INSERT INTO registered_projects (project_name, is_favorite, created_at, last_active_at)
+                VALUES (?, ?, datetime('now'), datetime('now'))
+                ON CONFLICT(project_name) DO UPDATE SET is_favorite = ?, last_active_at = datetime('now')
+            """, (project_name, new_fav, new_fav))
+            conn.commit()
+            return bool(new_fav)
+
+    def toggle_hidden(self, project_name: str) -> bool:
+        """Alterna si un proyecto está oculto/descartado. Retorna el nuevo estado booleano."""
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT is_hidden FROM registered_projects WHERE project_name = ?", (project_name,))
+            row = cur.fetchone()
+            current_hid = row["is_hidden"] if (row and row["is_hidden"] is not None) else 0
+            new_hid = 0 if current_hid == 1 else 1
+            
+            conn.execute("""
+                INSERT INTO registered_projects (project_name, is_hidden, created_at, last_active_at)
+                VALUES (?, ?, datetime('now'), datetime('now'))
+                ON CONFLICT(project_name) DO UPDATE SET is_hidden = ?, last_active_at = datetime('now')
+            """, (project_name, new_hid, new_hid))
+            conn.commit()
+            return bool(new_hid)
+
+    def consolidate_database(self) -> Dict[str, Any]:
+        """
+        Consolida sesiones históricas y proyectos registrados:
+        1. Resuelve raíces canónicas para subcarpetas (ej: components -> Grabadora), archivos (.md -> Proyecto 1) y UUIDs.
+        2. Registra y verifica proyectos detectados con sus tecnologías asociadas.
+        """
+        from backend.project_verifier import resolve_canonical_project, verify_project_folder
+        
+        updated_sessions = 0
+        with self.get_connection() as conn:
+            cur = conn.cursor()
+            cur.execute("SELECT id, project_name, project_path FROM sessions")
+            rows = cur.fetchall()
+            
+            for r in rows:
+                old_name = r["project_name"]
+                path = r["project_path"]
+                new_name = clean_project_name(old_name, path)
+                
+                if new_name != old_name:
+                    conn.execute("UPDATE sessions SET project_name = ? WHERE id = ?", (new_name, r["id"]))
+                    updated_sessions += 1
+            
+            # Poblar / actualizar registered_projects con datos limpios
+            cur.execute("""
+                SELECT project_name, MAX(project_path) as path 
+                FROM sessions 
+                WHERE project_name IS NOT NULL AND project_name != '' 
+                GROUP BY project_name
+            """)
+            distinct_projects = cur.fetchall()
+            
+            for dp in distinct_projects:
+                pname = dp["project_name"]
+                ppath = dp["path"] or ""
+                v = verify_project_folder(ppath)
+                tech_stack = v.get("tech_stack", "")
+                is_valid = 1 if v.get("is_valid") else 0
+                canonical_path = v.get("root_path") or ppath
+                
+                conn.execute("""
+                    INSERT INTO registered_projects (project_name, project_path, created_at, is_verified, tech_stack, last_active_at)
+                    VALUES (?, ?, datetime('now'), ?, ?, datetime('now'))
+                    ON CONFLICT(project_name) DO UPDATE SET
+                        project_path=COALESCE(excluded.project_path, registered_projects.project_path),
+                        tech_stack=CASE WHEN tech_stack = '' OR tech_stack IS NULL THEN excluded.tech_stack ELSE tech_stack END,
+                        is_verified=excluded.is_verified,
+                        last_active_at=datetime('now')
+                """, (pname, canonical_path, is_valid, tech_stack))
+            
+            conn.commit()
+            
+        return {"updated_sessions": updated_sessions, "total_projects": len(distinct_projects)}
 
     def get_sync_state(self, key: str) -> Optional[str]:
         with self.get_connection() as conn:
@@ -309,17 +428,25 @@ class Database:
             """, params)
             by_model = [dict(r) for r in cur.fetchall()]
 
-            # Project Breakdown (Filtered)
+            # Project Breakdown (Filtered, excluding hidden projects)
+            by_proj_where = where_sql
+            if not by_proj_where:
+                by_proj_where = "WHERE COALESCE(rp.is_hidden, 0) = 0"
+            else:
+                by_proj_where += " AND COALESCE(rp.is_hidden, 0) = 0"
+
             cur.execute(f"""
                 SELECT 
-                    project_name,
+                    s.project_name,
                     COUNT(*) as sessions,
-                    COALESCE(SUM(total_tokens), 0) as tokens,
-                    COALESCE(SUM(cost_usd), 0.0) as cost_usd
-                FROM sessions
-                {where_sql}
-                GROUP BY project_name
-                ORDER BY tokens DESC
+                    COALESCE(SUM(s.total_tokens), 0) as tokens,
+                    COALESCE(SUM(s.cost_usd), 0.0) as cost_usd,
+                    COALESCE(rp.is_favorite, 0) as is_favorite
+                FROM sessions s
+                LEFT JOIN registered_projects rp ON rp.project_name = s.project_name
+                {by_proj_where}
+                GROUP BY s.project_name
+                ORDER BY COALESCE(rp.is_favorite, 0) DESC, tokens DESC
                 LIMIT 15
             """, params)
             by_project = [dict(r) for r in cur.fetchall()]
@@ -376,14 +503,15 @@ class Database:
                 "optimizations": optim
             }
 
-    def get_projects_list(self) -> List[Dict[str, Any]]:
-        """Devuelve todos los proyectos con métricas acumuladas desde el inicio hasta hoy."""
+    def get_projects_list(self, include_hidden: bool = False) -> List[Dict[str, Any]]:
+        """Devuelve todos los proyectos con métricas acumuladas, ordenando favoritos primero."""
         with self.get_connection() as conn:
             cur = conn.cursor()
-            cur.execute("""
+            hidden_clause = "" if include_hidden else "AND COALESCE(rp.is_hidden, 0) = 0"
+            cur.execute(f"""
                 SELECT 
                     s.project_name,
-                    MAX(s.project_path) as project_path,
+                    COALESCE(rp.project_path, MAX(s.project_path)) as project_path,
                     COUNT(*) as session_count,
                     COALESCE(SUM(s.total_tokens), 0) as total_tokens,
                     COALESCE(SUM(s.input_tokens), 0) as input_tokens,
@@ -393,11 +521,17 @@ class Database:
                     MIN(s.start_time) as first_session_date,
                     MAX(s.start_time) as last_session_date,
                     COUNT(DISTINCT s.source_ide) as ide_count,
-                    COUNT(DISTINCT s.model_name) as model_count
+                    COUNT(DISTINCT s.model_name) as model_count,
+                    COALESCE(rp.is_favorite, 0) as is_favorite,
+                    COALESCE(rp.is_hidden, 0) as is_hidden,
+                    COALESCE(rp.is_verified, 1) as is_verified,
+                    COALESCE(rp.tech_stack, '') as tech_stack
                 FROM sessions s
+                LEFT JOIN registered_projects rp ON rp.project_name = s.project_name
                 WHERE s.project_name IS NOT NULL AND s.project_name != ''
+                {hidden_clause}
                 GROUP BY s.project_name
-                ORDER BY total_tokens DESC
+                ORDER BY COALESCE(rp.is_favorite, 0) DESC, total_tokens DESC
             """)
             return [dict(r) for r in cur.fetchall()]
 

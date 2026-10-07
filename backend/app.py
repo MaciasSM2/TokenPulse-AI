@@ -4,7 +4,7 @@ from pathlib import Path
 from fastapi import FastAPI, Query, HTTPException, Body
 from fastapi.staticfiles import StaticFiles
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import FileResponse, PlainTextResponse
+from fastapi.responses import FileResponse, PlainTextResponse, Response
 
 from backend.database import Database
 from backend.pricing import PricingEngine
@@ -71,9 +71,89 @@ def get_ides_status():
     return ides
 
 @app.get("/api/projects")
-def get_projects():
-    """Retorna la lista de todos los proyectos trackeados con sus métricas acumuladas desde el inicio."""
-    return db.get_projects_list()
+def get_projects(include_hidden: bool = Query(False)):
+    """Retorna la lista de todos los proyectos trackeados, con soporte para ocultar falsos positivos y ordenar favoritos."""
+    return db.get_projects_list(include_hidden=include_hidden)
+
+@app.get("/api/filesystem/browse")
+def api_browse_filesystem(path: Optional[str] = Query(None)):
+    """Navega y lista carpetas del disco con verificación de proyectos en tiempo real."""
+    from backend.project_verifier import scan_directory_candidates
+    return scan_directory_candidates(path)
+
+@app.post("/api/filesystem/verify")
+def api_verify_folder(payload: Dict[str, Any] = Body(...)):
+    """Verifica si una carpeta candidata es un proyecto válido de programación."""
+    from backend.project_verifier import verify_project_folder
+    target_path = payload.get("path", "")
+    res = verify_project_folder(target_path)
+    res["is_valid_project"] = res.get("is_valid", False)
+    res["project_name"] = res.get("name", "")
+    return res
+
+@app.post("/api/projects/{project_name}/favorite")
+def api_toggle_favorite(project_name: str):
+    """Alterna el estado de favorito (⭐) de un proyecto."""
+    new_state = db.toggle_favorite(project_name)
+    return {"status": "success", "project_name": project_name, "is_favorite": new_state}
+
+@app.post("/api/projects/{project_name}/hide")
+def api_toggle_hide(project_name: str):
+    """Alterna si un proyecto está oculto/descartado (👁️)."""
+    new_state = db.toggle_hidden(project_name)
+    return {"status": "success", "project_name": project_name, "is_hidden": new_state}
+
+@app.post("/api/projects/cleanup")
+def api_cleanup_projects():
+    """Re-consolida sesiones de subcarpetas hacia sus proyectos raíz canónicos."""
+    res = db.consolidate_database()
+    return {"status": "success", "result": res}
+
+@app.get("/api/projects/{project_name}/badge.svg")
+def api_project_badge(project_name: str):
+    """Genera una insignia SVG vectorial (Shield badge) lista para incrustar en cualquier README.md."""
+    proj = db.get_project_detail(project_name)
+    if not proj or not proj.get("summary"):
+        tokens_str = "0"
+        cost_str = "$0.00"
+    else:
+        sm = proj["summary"]
+        toks = sm.get("total_tokens", 0)
+        cost = sm.get("total_cost_usd", 0.0)
+        if toks >= 1_000_000:
+            tokens_str = f"{toks / 1_000_000:.1f}M"
+        elif toks >= 1_000:
+            tokens_str = f"{toks / 1_000:.1f}k"
+        else:
+            tokens_str = str(toks)
+        cost_str = f"${cost:.2f} USD"
+
+    badge_text = f"{tokens_str} tok | {cost_str}"
+    label = "TokenPulse AI"
+    total_width = 110 + len(badge_text) * 7
+    split_x = 90
+    
+    svg = f"""<svg xmlns="http://www.w3.org/2000/svg" width="{total_width}" height="20" role="img" aria-label="{label}: {badge_text}">
+      <linearGradient id="s" x2="0" y2="100%">
+        <stop offset="0" stop-color="#bbb" stop-opacity=".1"/>
+        <stop offset="1" stop-opacity=".1"/>
+      </linearGradient>
+      <clipPath id="r">
+        <rect width="{total_width}" height="20" rx="4" fill="#fff"/>
+      </clipPath>
+      <g clip-path="url(#r)">
+        <rect width="{split_x}" height="20" fill="#0f172a"/>
+        <rect x="{split_x}" width="{total_width - split_x}" height="20" fill="#00f0ff"/>
+        <rect width="{total_width}" height="20" fill="url(#s)"/>
+      </g>
+      <g fill="#fff" text-anchor="middle" font-family="Verdana,Geneva,DejaVu Sans,sans-serif" text-rendering="geometricPrecision" font-size="11">
+        <text x="{split_x / 2}" y="14" fill="#010101" fill-opacity=".3">{label}</text>
+        <text x="{split_x / 2}" y="13" fill="#38bdf8">{label}</text>
+        <text x="{split_x + (total_width - split_x) / 2}" y="14" fill="#000" fill-opacity=".3">{badge_text}</text>
+        <text x="{split_x + (total_width - split_x) / 2}" y="13" fill="#080c14" font-weight="bold">{badge_text}</text>
+      </g>
+    </svg>"""
+    return Response(content=svg, media_type="image/svg+xml")
 
 @app.get("/api/projects/{project_name}")
 def get_project_detail(

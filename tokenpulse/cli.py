@@ -347,6 +347,14 @@ def main():
     export_parser.add_argument("project", help="Nombre del proyecto a exportar")
     export_parser.add_argument("--out", default="", help="Ruta del archivo de salida")
 
+    # serve
+    serve_parser = subparsers.add_parser("serve", help="Iniciar el servidor y dashboard web interactivo")
+    serve_parser.add_argument("--port", type=int, default=4120, help="Puerto HTTP del dashboard (default 4120)")
+    serve_parser.add_argument("--host", default="127.0.0.1", help="Host IP (default 127.0.0.1)")
+
+    # cleanup
+    cleanup_parser = subparsers.add_parser("cleanup", help="Limpiar y consolidar subcarpetas y sesiones dispersas en la BD")
+
     args = parser.parse_args()
 
     if args.action == "init":
@@ -366,6 +374,18 @@ def main():
             print(f"Reporte exportado en: {args.out}")
         else:
             print(md)
+        return 0
+    elif args.action == "serve":
+        import uvicorn
+        from backend.sync_manager import SyncManager
+        SyncManager().sync_all()
+        print(f"Iniciando TokenPulse AI Dashboard en http://{args.host}:{args.port}")
+        uvicorn.run("backend.app:app", host=args.host, port=args.port, reload=False)
+        return 0
+    elif args.action == "cleanup":
+        from backend.database import Database
+        cleaned = Database().consolidate_database()
+        print(f"✓ Consolidación completada: {cleaned} sesiones reclasificadas a sus raíces canónicas.")
         return 0
     else:
         parser.print_help()

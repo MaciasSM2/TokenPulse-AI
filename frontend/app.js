@@ -8,6 +8,12 @@ let searchDebounceTimer = null;
 let allProjectsList = [];
 let cachedPricingModels = {};
 let currentPricingProvider = 'all';
+let cachedUsedModelNames = new Set();
+
+// Project Filter & Browser State
+let currentProjectFilter = 'all'; // 'all' | 'fav' | 'hidden'
+let currentBrowserPath = '';
+let verifyDebounceTimer = null;
 
 // Date Filter State (Defaults to 'today' as requested)
 let currentPreset = 'today';
@@ -132,6 +138,50 @@ function getIdeInfo(ideKey) {
     badgeClass: 'badge-ide',
     color: '#38bdf8'
   };
+}
+
+// Visibility and Environment Configuration (Local Storage)
+const VISIBILITY_STORAGE_KEY = 'tokenpulse_visibility_settings';
+
+function getVisibilitySettings() {
+  const defaults = {
+    hideInactiveIdes: true,
+    hideUnusedModels: false,
+    showHiddenProjects: false,
+    ides: {
+      antigravity: true,
+      opencode: true,
+      claude: true,
+      cursor: true,
+      windsurf: true,
+      vscode: true,
+      ollama: true,
+      continue: true,
+      aider: true
+    }
+  };
+  try {
+    const raw = localStorage.getItem(VISIBILITY_STORAGE_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      return {
+        ...defaults,
+        ...parsed,
+        ides: { ...defaults.ides, ...(parsed.ides || {}) }
+      };
+    }
+  } catch (e) {
+    console.error('Error reading visibility settings:', e);
+  }
+  return defaults;
+}
+
+function saveVisibilitySettings(settings) {
+  try {
+    localStorage.setItem(VISIBILITY_STORAGE_KEY, JSON.stringify(settings));
+  } catch (e) {
+    console.error('Error saving visibility settings:', e);
+  }
 }
 
 // Formatters
@@ -324,7 +374,37 @@ async function loadIdesHub() {
 
 function renderIdesHub(ides) {
   if (!ideHubContainer) return;
-  ideHubContainer.innerHTML = ides.map(ide => {
+  const settings = getVisibilitySettings();
+
+  const filteredIdes = ides.filter(ide => {
+    // 1. Check if disabled explicitly by user in visibility modal
+    if (settings.ides && settings.ides[ide.id] === false) return false;
+    // 2. Check if inactive environments should be hidden
+    if (settings.hideInactiveIdes) {
+      const hasActivity = (ide.tokens_count && ide.tokens_count > 0) || ide.status === 'active';
+      return hasActivity;
+    }
+    return true;
+  });
+
+  if (filteredIdes.length === 0) {
+    ideHubContainer.innerHTML = `
+      <div style="grid-column: 1 / -1; padding: 14px 20px; text-align: center; color: var(--text-dim); font-size: 13px; background: rgba(255,255,255,0.02); border-radius: 8px; border: 1px dashed var(--border-subtle);">
+        Todos los entornos inactivos están ocultos según tus preferencias de visibilidad.
+        <button class="btn btn-outline btn-xs" style="margin-left: 10px;" id="btnOpenVisibilityFromEmpty">
+          ⚙️ Ajustar Visibilidad
+        </button>
+      </div>
+    `;
+    const emptyBtn = document.getElementById('btnOpenVisibilityFromEmpty');
+    if (emptyBtn) emptyBtn.addEventListener('click', () => {
+      const modal = document.getElementById('visibilityModal');
+      if (modal) modal.classList.add('open');
+    });
+    return;
+  }
+
+  ideHubContainer.innerHTML = filteredIdes.map(ide => {
     const isActive = ide.status === 'active';
     const isDetected = ide.detected;
     const dotClass = isActive ? 'active' : (isDetected ? 'detected' : 'inactive');
@@ -372,7 +452,7 @@ function renderIdesHub(ides) {
 
 async function loadProjectsList() {
   try {
-    const res = await fetch('/api/projects');
+    const res = await fetch('/api/projects?include_hidden=true');
     if (!res.ok) throw new Error('Error al cargar proyectos');
     allProjectsList = await res.json();
     renderProjectSelectOptions();
@@ -527,38 +607,120 @@ function renderProjectDetail(detail) {
 // Rendering: Dropdown & Widgets
 function renderProjectSelectOptions() {
   const currentVal = projectSelect.value;
+  // Only show active (non-hidden) projects in dropdown, prefixing favorites with star
+  const visibleProjects = allProjectsList.filter(p => !p.is_hidden);
   projectSelect.innerHTML = `<option value="">📁 Seleccionar Proyecto...</option>` +
-    allProjectsList.map(p => `
-      <option value="${escapeHtml(p.project_name)}">${escapeHtml(p.project_name)} (${formatNumber(p.total_tokens)} tokens)</option>
+    visibleProjects.map(p => `
+      <option value="${escapeHtml(p.project_name)}">${p.is_favorite ? '⭐ ' : ''}${escapeHtml(p.project_name)} (${formatNumber(p.total_tokens)} tokens)</option>
     `).join('');
   
   if (currentVal) projectSelect.value = currentVal;
 }
 
 function renderProjectsListWidget() {
-  if (allProjectsList.length === 0) {
-    projectsContainer.innerHTML = `<p class="panel-hint">Sin proyectos registrados.</p>`;
+  if (!projectsContainer) return;
+  const settings = getVisibilitySettings();
+
+  // Filter projects based on current tab and visibility settings
+  let filtered = allProjectsList;
+  if (currentProjectFilter === 'fav') {
+    filtered = allProjectsList.filter(p => p.is_favorite === 1);
+  } else if (currentProjectFilter === 'hidden') {
+    filtered = allProjectsList.filter(p => p.is_hidden === 1);
+  } else {
+    // 'all' tab: hide hidden projects unless setting showHiddenProjects is true
+    if (!settings.showHiddenProjects) {
+      filtered = allProjectsList.filter(p => p.is_hidden !== 1);
+    }
+  }
+
+  if (filtered.length === 0) {
+    let emptyMsg = 'Sin proyectos registrados.';
+    if (currentProjectFilter === 'fav') emptyMsg = '⭐ No tienes proyectos fijados como favoritos. Haz clic en la estrella de cualquier proyecto para fijarlo aquí.';
+    if (currentProjectFilter === 'hidden') emptyMsg = 'No tienes proyectos archivados u ocultos.';
+    projectsContainer.innerHTML = `<p class="panel-hint" style="padding: 14px 0; text-align: center;">${emptyMsg}</p>`;
     return;
   }
 
-  projectsContainer.innerHTML = allProjectsList.slice(0, 7).map(p => `
-    <div class="project-row" data-project="${escapeHtml(p.project_name)}" title="Ver auditoría de ${escapeHtml(p.project_name)}">
-      <span class="project-name">
-        <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-          <path d="M22 19a2 2 0 0 1-2 2H4a2 2 0 0 1-2-2V5a2 2 0 0 1 2-2h5l2 3h9a2 2 0 0 1 2 2z"/>
-        </svg>
-        ${escapeHtml(p.project_name)}
-      </span>
-      <span class="project-tokens">${formatNumber(p.total_tokens)} tokens (${formatUSD(p.total_cost_usd)})</span>
-    </div>
-  `).join('');
+  projectsContainer.innerHTML = filtered.map(p => {
+    const isFav = p.is_favorite === 1;
+    const isHidden = p.is_hidden === 1;
+    let stackSnippet = '';
+    if (p.tech_stack) {
+      stackSnippet = p.tech_stack.split(' • ').slice(0, 2).join(' · ');
+    }
+
+    return `
+      <div class="project-row ${isFav ? 'is-fav' : ''}" data-project="${escapeHtml(p.project_name)}">
+        <div class="project-main-info">
+          <button class="btn-fav-star ${isFav ? 'active' : ''}" data-project="${escapeHtml(p.project_name)}" title="${isFav ? 'Quitar de favoritos' : 'Fijar como favorito ⭐'}">
+            ${isFav ? '⭐' : '☆'}
+          </button>
+          <div style="min-width: 0; flex: 1;">
+            <div class="project-name-text">
+              ${escapeHtml(p.project_name)}
+              ${p.is_verified ? '<span title="Proyecto verificado en disco con descriptores válidos" style="color: #10b981; margin-left: 4px; font-size: 11px;">✓</span>' : ''}
+            </div>
+            ${stackSnippet ? `<div class="project-tech-badge">${escapeHtml(stackSnippet)}</div>` : ''}
+          </div>
+        </div>
+        <div class="project-actions-group">
+          <span class="project-tokens mono-num" style="font-size: 11px; color: var(--text-dim); margin-right: 4px;">
+            ${formatNumber(p.total_tokens)} tok (${formatUSD(p.total_cost_usd)})
+          </span>
+          <button class="btn-hide-eye" data-project="${escapeHtml(p.project_name)}" title="${isHidden ? 'Restaurar proyecto en vista principal' : 'Ocultar / Archivar proyecto'}">
+            ${isHidden ? '👁️' : '🚫'}
+          </button>
+        </div>
+      </div>
+    `;
+  }).join('');
 
   // Add click handlers on project rows
   document.querySelectorAll('.project-row').forEach(row => {
-    row.addEventListener('click', () => {
+    row.addEventListener('click', (e) => {
+      if (e.target.closest('.btn-fav-star') || e.target.closest('.btn-hide-eye')) return;
       const pName = row.dataset.project;
       if (pName) {
         switchViewMode('project', pName);
+      }
+    });
+  });
+
+  // Favorite Star click handlers
+  document.querySelectorAll('.btn-fav-star').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const pName = btn.dataset.project;
+      if (!pName) return;
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(pName)}/favorite`, { method: 'POST' });
+        const data = await res.json();
+        const found = allProjectsList.find(p => p.project_name === pName);
+        if (found) found.is_favorite = data.is_favorite;
+        renderProjectSelectOptions();
+        renderProjectsListWidget();
+      } catch (err) {
+        console.error('Error toggling favorite:', err);
+      }
+    });
+  });
+
+  // Hide Eye click handlers
+  document.querySelectorAll('.btn-hide-eye').forEach(btn => {
+    btn.addEventListener('click', async (e) => {
+      e.stopPropagation();
+      const pName = btn.dataset.project;
+      if (!pName) return;
+      try {
+        const res = await fetch(`/api/projects/${encodeURIComponent(pName)}/hide`, { method: 'POST' });
+        const data = await res.json();
+        const found = allProjectsList.find(p => p.project_name === pName);
+        if (found) found.is_hidden = data.is_hidden;
+        renderProjectSelectOptions();
+        renderProjectsListWidget();
+      } catch (err) {
+        console.error('Error toggling hide:', err);
       }
     });
   });
@@ -569,6 +731,9 @@ function renderStats(data) {
   const lifetime = data.lifetime || {};
   const byIde = data.by_ide || [];
   const byModel = data.by_model || [];
+  byModel.forEach(m => {
+    if (m.model_name) cachedUsedModelNames.add(m.model_name);
+  });
   const timeline = data.timeline || [];
 
   // Dynamic KPI Labels based on active preset
@@ -797,9 +962,288 @@ sessionSearch.addEventListener('input', (e) => {
   }, 300);
 });
 
-// Modal: Link Project
+// Project Filter Tabs (Todos, Favoritos, Ocultos)
+function setupProjectFilterTabs() {
+  const tabs = document.querySelectorAll('.proj-pill-tab');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      currentProjectFilter = tab.dataset.tab;
+      renderProjectsListWidget();
+    });
+  });
+}
+
+// Modal: Visibility & Environment Settings
+function setupVisibilityModal() {
+  const modal = document.getElementById('visibilityModal');
+  const btnOpenHeader = document.getElementById('btnVisibilityModal');
+  const btnOpenHub = document.getElementById('btnHubVisibilityModal');
+  const btnClose = document.getElementById('btnCloseVisibilityModal');
+  const btnCancel = document.getElementById('btnCancelVisibility');
+  const btnSave = document.getElementById('btnSaveVisibility');
+  const toggleInactive = document.getElementById('toggleHideInactiveIdes');
+  const toggleModels = document.getElementById('toggleHideUnusedModels');
+  const toggleHidden = document.getElementById('toggleShowHiddenProjects');
+  const grid = document.getElementById('ideVisibilityGrid');
+
+  if (!modal) return;
+
+  function openVisibilityModal() {
+    const s = getVisibilitySettings();
+    if (toggleInactive) toggleInactive.checked = s.hideInactiveIdes;
+    if (toggleModels) toggleModels.checked = s.hideUnusedModels;
+    if (toggleHidden) toggleHidden.checked = s.showHiddenProjects;
+
+    if (grid) {
+      grid.innerHTML = Object.entries(IDE_REGISTRY).map(([id, info]) => {
+        const isChecked = s.ides[id] !== false;
+        return `
+          <label class="ide-vis-item">
+            <input type="checkbox" data-ide-id="${id}" ${isChecked ? 'checked' : ''}>
+            <span style="display:inline-block; width:8px; height:8px; border-radius:50%; background:${info.color};"></span>
+            <span class="ide-vis-label">${info.name}</span>
+          </label>
+        `;
+      }).join('');
+    }
+
+    modal.classList.add('open');
+  }
+
+  function closeVisibilityModal() {
+    modal.classList.remove('open');
+  }
+
+  if (btnOpenHeader) btnOpenHeader.addEventListener('click', openVisibilityModal);
+  if (btnOpenHub) btnOpenHub.addEventListener('click', openVisibilityModal);
+  if (btnClose) btnClose.addEventListener('click', closeVisibilityModal);
+  if (btnCancel) btnCancel.addEventListener('click', closeVisibilityModal);
+
+  if (btnSave) {
+    btnSave.addEventListener('click', () => {
+      const s = getVisibilitySettings();
+      if (toggleInactive) s.hideInactiveIdes = toggleInactive.checked;
+      if (toggleModels) s.hideUnusedModels = toggleModels.checked;
+      if (toggleHidden) s.showHiddenProjects = toggleHidden.checked;
+
+      if (grid) {
+        grid.querySelectorAll('input[type="checkbox"]').forEach(chk => {
+          const ideId = chk.dataset.ideId;
+          if (ideId) s.ides[ideId] = chk.checked;
+        });
+      }
+
+      saveVisibilitySettings(s);
+      closeVisibilityModal();
+
+      // Refresh hub and lists
+      loadIdesHub();
+      renderProjectsListWidget();
+      renderPricingTable();
+    });
+  }
+}
+
+// Modal: Link Project, Folder Browser & Live Verification
+function setupFolderBrowserAndVerification() {
+  const btnBrowseFolder = document.getElementById('btnBrowseFolder');
+  const folderBrowserBox = document.getElementById('folderBrowserBox');
+  const browserCurrentPath = document.getElementById('browserCurrentPath');
+  const btnBrowseUp = document.getElementById('btnBrowseUp');
+  const folderListContainer = document.getElementById('folderListContainer');
+  const verifyFeedbackBox = document.getElementById('verifyFeedbackBox');
+  const verifyStatusBadge = document.getElementById('verifyStatusBadge');
+  const verifyProjectName = document.getElementById('verifyProjectName');
+  const verifyDetailsText = document.getElementById('verifyDetailsText');
+  const btnConsolidateModal = document.getElementById('btnConsolidateModal');
+
+  // Toggle browser box
+  if (btnBrowseFolder) {
+    btnBrowseFolder.addEventListener('click', () => {
+      if (!folderBrowserBox) return;
+      const isOpen = folderBrowserBox.style.display !== 'none';
+      if (isOpen) {
+        folderBrowserBox.style.display = 'none';
+      } else {
+        folderBrowserBox.style.display = 'block';
+        browsePath(linkPathInput.value.trim() || '');
+      }
+    });
+  }
+
+  async function browsePath(targetPath) {
+    if (!folderListContainer) return;
+    folderListContainer.innerHTML = '<div style="padding: 10px; color: var(--text-dim); font-size: 11px;">Cargando carpetas...</div>';
+
+    try {
+      let url = '/api/filesystem/browse';
+      if (targetPath) url += `?path=${encodeURIComponent(targetPath)}`;
+      const res = await fetch(url);
+      if (!res.ok) throw new Error('Error al explorar directorios');
+      const data = await res.json();
+
+      currentBrowserPath = data.current_path;
+      if (browserCurrentPath) browserCurrentPath.textContent = data.current_path;
+      if (btnBrowseUp) {
+        btnBrowseUp.disabled = !data.parent_path;
+        btnBrowseUp.dataset.parent = data.parent_path || '';
+      }
+
+      if (!data.folders || data.folders.length === 0) {
+        folderListContainer.innerHTML = '<div style="padding: 8px 12px; color: var(--text-dim); font-size: 11px;">No hay subcarpetas accesibles aquí.</div>';
+        return;
+      }
+
+      folderListContainer.innerHTML = data.folders.map(f => {
+        const firstStack = f.tech_stack ? (Array.isArray(f.tech_stack) ? f.tech_stack[0] : f.tech_stack.split(' • ')[0]) : 'Detectado';
+        const stackTag = (f.is_valid_project || f.is_valid)
+          ? `<span class="folder-tag-valid">✅ ${escapeHtml(firstStack)}</span>`
+          : `<span class="folder-tag-simple">📁 Carpeta</span>`;
+
+        return `
+          <div class="folder-browser-item" data-folder-path="${escapeHtml(f.path)}" data-folder-name="${escapeHtml(f.name)}">
+            <div class="folder-browser-name" style="cursor: pointer;">
+              <span>📁</span>
+              <span>${escapeHtml(f.name)}</span>
+            </div>
+            <div style="display: flex; align-items: center; gap: 8px;">
+              ${stackTag}
+              <button type="button" class="btn btn-secondary btn-xs btn-use-folder" data-path="${escapeHtml(f.path)}" data-name="${escapeHtml(f.name)}">
+                Seleccionar
+              </button>
+            </div>
+          </div>
+        `;
+      }).join('');
+
+      // Click on folder name drills down
+      folderListContainer.querySelectorAll('.folder-browser-name').forEach(el => {
+        el.addEventListener('click', (e) => {
+          const item = e.target.closest('.folder-browser-item');
+          if (item && item.dataset.folderPath) {
+            browsePath(item.dataset.folderPath);
+          }
+        });
+      });
+
+      // Click on "Seleccionar" selects path, fills form and verifies
+      folderListContainer.querySelectorAll('.btn-use-folder').forEach(btn => {
+        btn.addEventListener('click', (e) => {
+          e.stopPropagation();
+          const p = btn.dataset.path;
+          const n = btn.dataset.name;
+          if (linkPathInput) linkPathInput.value = p;
+          if (linkNameInput && (!linkNameInput.value || linkNameInput.value === '')) {
+            linkNameInput.value = n;
+          }
+          if (folderBrowserBox) folderBrowserBox.style.display = 'none';
+          verifyPath(p);
+        });
+      });
+    } catch (err) {
+      folderListContainer.innerHTML = `<div style="padding: 8px; color: #f43f5e; font-size: 11px;">Error: ${escapeHtml(err.message)}</div>`;
+    }
+  }
+
+  if (btnBrowseUp) {
+    btnBrowseUp.addEventListener('click', () => {
+      const parent = btnBrowseUp.dataset.parent;
+      if (parent) browsePath(parent);
+    });
+  }
+
+  // Live Verification
+  async function verifyPath(pathVal) {
+    if (!verifyFeedbackBox) return;
+    if (!pathVal || !pathVal.trim()) {
+      verifyFeedbackBox.style.display = 'none';
+      return;
+    }
+
+    try {
+      const res = await fetch('/api/filesystem/verify', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ path: pathVal.trim() })
+      });
+      const data = await res.json();
+      verifyFeedbackBox.style.display = 'block';
+
+      verifyFeedbackBox.classList.remove('is-subfolder', 'is-invalid');
+
+      const isValid = data.is_valid || data.is_valid_project;
+      const projName = data.project_name || data.name || 'Detectado';
+      const stackList = Array.isArray(data.tech_stack) ? data.tech_stack.join(' • ') : (data.tech_stack || 'Detectado');
+      const indicatorsList = Array.isArray(data.indicators) ? data.indicators.join(', ') : (data.indicators || '');
+
+      if (isValid) {
+        verifyStatusBadge.textContent = `✅ Proyecto Válido (${data.score || 10}%)`;
+        verifyStatusBadge.style.color = '#10b981';
+        verifyStatusBadge.style.background = 'rgba(16, 185, 129, 0.2)';
+        verifyProjectName.textContent = projName;
+        verifyDetailsText.innerHTML = `<strong>Stack:</strong> ${escapeHtml(stackList)}<br><strong>Indicadores:</strong> ${escapeHtml(indicatorsList)}`;
+        if (linkNameInput && !linkNameInput.value) {
+          linkNameInput.value = projName;
+        }
+      } else if (data.is_directory !== false && data.exists !== false) {
+        verifyFeedbackBox.classList.add('is-subfolder');
+        verifyStatusBadge.textContent = '⚠️ Carpeta Simple';
+        verifyStatusBadge.style.color = '#f59e0b';
+        verifyStatusBadge.style.background = 'rgba(245, 158, 11, 0.2)';
+        verifyProjectName.textContent = projName || 'Directorio';
+        verifyDetailsText.textContent = 'Esta carpeta no contiene archivos de configuración de proyecto (.git, package.json, etc.). Puedes vincularla de todas formas.';
+      } else {
+        verifyFeedbackBox.classList.add('is-invalid');
+        verifyStatusBadge.textContent = '❌ Ruta no encontrada';
+        verifyStatusBadge.style.color = '#f43f5e';
+        verifyStatusBadge.style.background = 'rgba(244, 63, 94, 0.2)';
+        verifyProjectName.textContent = 'Error';
+        verifyDetailsText.textContent = 'La ruta especificada no existe en el disco o no es un directorio accesible.';
+      }
+    } catch (err) {
+      console.error('Error verifying path:', err);
+    }
+  }
+
+  // Debounced input verification
+  if (linkPathInput) {
+    linkPathInput.addEventListener('input', (e) => {
+      clearTimeout(verifyDebounceTimer);
+      verifyDebounceTimer = setTimeout(() => {
+        verifyPath(e.target.value.trim());
+      }, 350);
+    });
+  }
+
+  // Consolidate and Clean Sessions
+  if (btnConsolidateModal) {
+    btnConsolidateModal.addEventListener('click', async () => {
+      btnConsolidateModal.disabled = true;
+      btnConsolidateModal.textContent = '🧹 Consolidando...';
+      try {
+        const res = await fetch('/api/projects/cleanup', { method: 'POST' });
+        const data = await res.json();
+        alert(data.message || `Consolidación exitosa. Se actualizaron ${data.cleaned_count} sesiones.`);
+        await Promise.all([loadStats(), loadProjectsList(), loadSessions()]);
+      } catch (err) {
+        alert('Error durante la consolidación: ' + err.message);
+      } finally {
+        btnConsolidateModal.disabled = false;
+        btnConsolidateModal.innerHTML = '<span>🧹 Limpiar y Consolidar Sesiones</span>';
+      }
+    });
+  }
+}
+
+// Modal: Link Project Submit Handlers
 btnLinkProject.addEventListener('click', () => {
   linkProjectModal.classList.add('open');
+  const verifyFeedbackBox = document.getElementById('verifyFeedbackBox');
+  if (verifyFeedbackBox) verifyFeedbackBox.style.display = 'none';
+  const folderBrowserBox = document.getElementById('folderBrowserBox');
+  if (folderBrowserBox) folderBrowserBox.style.display = 'none';
 });
 btnCloseLinkModal.addEventListener('click', () => linkProjectModal.classList.remove('open'));
 btnCancelLink.addEventListener('click', () => linkProjectModal.classList.remove('open'));
@@ -810,7 +1254,7 @@ btnSubmitLink.addEventListener('click', async () => {
   const budgetVal = parseFloat(linkBudgetInput.value) || 0.0;
 
   if (!pathVal) {
-    alert('Por favor ingresa la ruta de la carpeta del proyecto.');
+    alert('Por favor ingresa o selecciona la ruta de la carpeta del proyecto.');
     return;
   }
 
@@ -889,11 +1333,26 @@ async function loadPricing() {
 }
 
 function renderPricingTable() {
+  const settings = getVisibilitySettings();
   const keys = Object.keys(cachedPricingModels);
   const filteredKeys = keys.filter(key => {
-    if (currentPricingProvider === 'all') return true;
-    const provider = cachedPricingModels[key].provider || 'General';
-    return provider === currentPricingProvider;
+    if (currentPricingProvider !== 'all') {
+      const provider = cachedPricingModels[key].provider || 'General';
+      if (provider !== currentPricingProvider) return false;
+    }
+
+    if (settings.hideUnusedModels && cachedUsedModelNames.size > 0) {
+      const m = cachedPricingModels[key];
+      const modelName = (m && m.name) ? m.name.toLowerCase() : '';
+      const keyLower = key.toLowerCase();
+      const isUsed = Array.from(cachedUsedModelNames).some(used => {
+        const u = used.toLowerCase();
+        return u.includes(keyLower) || keyLower.includes(u) || (modelName && (u.includes(modelName) || modelName.includes(u)));
+      });
+      if (!isUsed) return false;
+    }
+
+    return true;
   });
 
   if (filteredKeys.length === 0) {
@@ -973,6 +1432,9 @@ if (btnExportProject) {
 // Initial Boot
 async function initApp() {
   setupPresetButtonListeners();
+  setupProjectFilterTabs();
+  setupVisibilityModal();
+  setupFolderBrowserAndVerification();
 
   // First fetch stats to get server dates and bounds
   await loadStats();

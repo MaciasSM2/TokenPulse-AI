@@ -266,3 +266,50 @@ Salida esperada: `5/5 verificaciones superadas con éxito`, reportando estado 10
   * Git Tag: `v1.3.0`
   * GitHub Release: Creado y publicado con `gh release create v1.3.0` en el repositorio [MaciasSM2/TokenPulse-AI](https://github.com/MaciasSM2/TokenPulse-AI).
 
+---
+
+## 11. Solicitud 8 — Explorador de Disco, Verificador Anti-Falsos Positivos, Favoritos, Ocultar Carpetas, Configuración de Visibilidad y Empaquetado para Adopción Externa
+
+* **Fecha de Implementación:** 2026-10-07
+* **Contexto y Problemática:**
+  1. **Falsos Positivos en Detección de Proyectos:** Subdirectorios de código (`frontend/src/components`, `game/images/world`, `whatsapp-backend/src`) o archivos individuales (`.md`) se registraban incorrectamente como proyectos separados al interactuar con IDEs como OpenCode Desktop.
+  2. **Ausencia de Explorador en Disco:** El usuario requería poder navegar interactivamente por las carpetas del sistema para seleccionar la ruta exacta de cualquier proyecto y validarla antes de vincularla.
+  3. **Sobrecarga Visual en IDE Hub y Modelos:** Múltiples entornos desconectados (7 IDEs sin actividad como Claude, Cursor, Windsurf, Continue, Aider) ocupaban espacio visual innecesario en la pantalla.
+  4. **Adopción y Reutilización Externa:** El sistema debía poder ser descargado, instalado vía `pip` e integrado con 2 líneas de código en proyectos externos (Python, Ren'Py, FastAPI, scripts de IA).
+* **Soluciones Implementadas:**
+  * **Motor Canónico y Verificador de Proyectos (`backend/project_verifier.py`):**
+    * Función `resolve_canonical_project(path)`: Escala el árbol de directorios buscando raíces reales (`.git`, `.tokenpulse`, `package.json`, `Cargo.toml`, Ren'Py `game/options.rpy`, etc.).
+    * Función `verify_project_folder(path)`: Calcula un puntaje de confianza (0-100%), stack tecnológico (`Git • Ren'Py • Python • Node`) y descriptores válidos.
+    * Función `scan_directory_candidates(path)`: Explorador que audita y clasifica subcarpetas en tiempo real.
+  * **Base de Datos y Consolidación (`backend/database.py`):**
+    * Columnas agregadas a `registered_projects`: `is_favorite`, `is_hidden`, `is_verified`, `tech_stack`.
+    * Función `consolidate_database()`: Reclasificó y unificó 17 sesiones dispersas en subcarpetas a sus proyectos raíz canónicos (`Proyecto 1`, `Grabadora_para_Escritores`, `ChatBot-Modulo-Saludo`).
+    * Métodos `toggle_favorite(name)` y `toggle_hidden(name)` para alternar estados al instante.
+  * **API REST (`backend/app.py`):**
+    * `GET /api/filesystem/browse`: Exploración en vivo de directorios.
+    * `POST /api/filesystem/verify`: Verificación algorítmica de carpetas.
+    * `POST /api/projects/{name}/favorite`: Alternar favorito ⭐.
+    * `POST /api/projects/{name}/hide`: Alternar ocultar/archivar 👁️.
+    * `POST /api/projects/cleanup`: Forzar re-consolidación de base de datos.
+    * `GET /api/projects/{name}/badge.svg`: Insignia vectorial SVG lista para incrustar en `README.md`.
+  * **Interfaz de Usuario Reactiva (`frontend/`):**
+    * **Modal de Visibilidad (`#visibilityModal`):**
+      * Interruptor maestro para ocultar IDEs desconectados/inactivos con 1 toque.
+      * Cuadrícula de checkboxes individuales para los 9 IDEs soportados.
+      * Toggles para ocultar modelos no utilizados y mostrar/ocultar proyectos archivados.
+      * Persistencia en `localStorage`.
+    * **Explorador Visual en Modal de Vinculación (`#folderBrowserBox`):**
+      * Navegación hacia arriba y hacia adentro por el árbol de directorios.
+      * Badges de proyecto detectado (`✅ Proyecto`) vs carpeta simple (`📁 Carpeta`).
+      * Botón `Seleccionar` con auto-relleno y cálculo de score de confianza en vivo.
+    * **Pestañas y Acciones de Proyectos:**
+      * Pestañas `📁 Todos`, `⭐ Favoritos`, `👁️ Ocultos`.
+      * Botón ⭐ para anclar proyectos favoritos al tope de la lista y en el selector.
+      * Botón 👁️ para descartar carpetas que no se desean ver sin perder su historial.
+  * **Empaquetado y SDK de Medición (`pyproject.toml`, `tokenpulse/tracker.py`):**
+    * Configuración PEP 517/518 lista para `pip install -e .`.
+    * SDK Python con clase `TokenTracker`, helper `track_usage` y decorador `@tracker.track()` tolerante a fallos.
+    * Comandos CLI ampliados: `tokenpulse serve` y `tokenpulse cleanup`.
+    * Documentación completa en `GUIA_INTEGRACION_Y_ADOPCION.md`.
+
+
